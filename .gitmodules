@@ -1,0 +1,9 @@
+[submodule "locust_scripts"]
+	path = locust_scripts
+	url = https://github.com/jtpgames/Locust_Scripts
+[submodule "Simulators"]
+	path = Simulators
+	url = https://github.com/jtpgames/Simulators
+[submodule "RAST-Common-Python"]
+	path = RAST-Common-Python
+	url = https://github.com/jtpgames/RAST-Common-Python.git
