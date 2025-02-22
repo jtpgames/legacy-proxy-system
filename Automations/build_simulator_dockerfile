@@ -1,0 +1,6 @@
+FROM eclipse-temurin:17-jdk
+WORKDIR /app
+
+# The actual source code and build output will be mounted at runtime using:
+# docker run --rm -v "../Simulators:/app" build_simulator_dockerfile ./gradlew shadowJar -PmainClass=ArsKt
+

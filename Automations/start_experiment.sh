@@ -83,6 +83,17 @@ done
 # Shift past processed options
 shift $((OPTIND - 1))
 
+# build simulator
+echo "Building ARS Simulator ..."
+# docker buildx build -t simulator_builder -f build_simulator_dockerfile .
+# docker run --rm -v "$(pwd)/../Simulators:/app" simulator_builder ./gradlew shadowJar -PmainClass=ArsKt
+
+# move to root folder
+cd ../
+
+echo "start legacy proxy system"
+cd python
+
 [[ "$verbose" == true ]] && echo "Verbose mode enabled."
 [[ "$run_cleanup" == true ]] && cleanup_logs
 
@@ -106,6 +117,9 @@ docker-compose up -d
 echo "Waiting for services to start..."
 sleep 10
 
+# move to root folder
+cd ..
+
 set +e
 
 echo "Sending test message..."
@@ -113,6 +127,7 @@ curl -X POST -H "Content-Type: application/json" -H "Request-Id: 42" \
     -d '{"id": "070010", "body": "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"}' \
     http://localhost:8081/ID_REQ_KC_STORE7D3BPACKET
 
+cd Automations
 echo -e "\nServices are running in docker containers."
 docker-compose ps
 echo -e "\nTo view logs:"

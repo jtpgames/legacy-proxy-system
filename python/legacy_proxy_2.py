@@ -56,9 +56,9 @@ class MQTTToHTTPForwarder:
             payload = msg.payload.decode()
             logger.info(f"Received message on topic {msg.topic} (QoS {msg.qos}): {payload}")
             
-            # response = requests.post(TARGET_URL, json=payload)
-            # response.raise_for_status()
-            # logger.info(f"Successfully forwarded message to {TARGET_URL}")
+            response = requests.post(TARGET_URL, json=payload)
+            response.raise_for_status()
+            logger.info(f"Successfully forwarded message to {TARGET_URL}")
             
         except json.JSONDecodeError as e:
             logger.error(f"Failed to decode message as JSON: {e}")
