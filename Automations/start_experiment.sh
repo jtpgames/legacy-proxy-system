@@ -3,6 +3,25 @@
 set -e
 set -o pipefail
 
+function activate_venv_in_current_dir {
+  # Check if the "venv" folder exists
+  if [ ! -d "venv" ]; then
+    echo "The 'venv' folder does not exist. Exiting."
+    exit 1
+  fi
+
+  # Activate the virtual environment
+  source venv/bin/activate
+
+  # Check if the virtual environment was activated successfully
+  if [ $? -eq 0 ]; then
+    echo "Virtual environment 'venv' activated successfully."
+  else
+    echo "Failed to activate the virtual environment 'venv'. Exiting."
+    exit 1
+  fi
+}
+
 # Function: Display usage instructions
 usage() {
     echo "Usage: $0 [options]"
@@ -17,8 +36,21 @@ usage() {
 cleanup() {
     set +e
     echo -e "\nCleaning up..."
+
+    # Check if docker-compose.yml exists, otherwise change directory
+    if [[ ! -f "docker-compose.yml" ]]; then
+        echo "docker-compose.yml not found. Changing directory to ../python..."
+        cd ../python || { echo "Failed to change directory! Exiting."; exit 1; }
+    fi
+
     [[ "$verbose" == true ]] && echo "Stopping all containers..."
     docker-compose down --remove-orphans
+
+    screen -S prod_workload_screen -X quit
+    screen -S load_tester_screen -X quit
+    echo "shutting down load tester and waiting for 10 seconds"
+    sleep 10
+
     [[ "$verbose" == true ]] && echo "Cleanup completed."
     
     # Only exit if no_exit parameter is not provided
@@ -83,11 +115,6 @@ done
 # Shift past processed options
 shift $((OPTIND - 1))
 
-# build simulator
-echo "Building ARS Simulator ..."
-# docker buildx build -t simulator_builder -f build_simulator_dockerfile .
-# docker run --rm -v "$(pwd)/../Simulators:/app" simulator_builder ./gradlew shadowJar -PmainClass=ArsKt
-
 # move to root folder
 cd ../
 
@@ -122,19 +149,63 @@ cd ..
 
 set +e
 
-echo "Sending test message..."
-curl -X POST -H "Content-Type: application/json" -H "Request-Id: 42" \
-    -d '{"id": "070010", "body": "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"}' \
-    http://localhost:8081/ID_REQ_KC_STORE7D3BPACKET
+# move to locust folder
+cd locust_scripts
+./delete_results.sh
 
-cd Automations
+activate_venv_in_current_dir
+
+echo "Launching Production Workload directly on the last ARS component"
+screen -S prod_workload_screen -d -m bash -c "python executor.py locust/gen_gs_prod_workload.py -u http://localhost:8084"
+
+echo "Launching Alarm Device workload to the first ARS component"
+cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload.py -u http://localhost:8081 -m 500 -p'
+
+cmd_ad_workload="$cmd_ad_workload &> /dev/null"
+
+screen -S load_tester_screen -d -m bash -c "$cmd_ad_workload"
+
+cd ../
+
+cd python
 echo -e "\nServices are running in docker containers."
 docker-compose ps
 echo -e "\nTo view logs:"
 echo "docker-compose logs -f"
 echo -e "\nPress Ctrl+C to stop all services and cleanup."
 
-# Wait indefinitely until Ctrl+C
+cd ../
+cd locust_scripts
+
+echo "Begin polling the locust-parameter-variation.log to check if the load test was finished ('Finished performance test.')"
+
+file_path="locust-parameter-variation.log"
+
+# Loop until the last line contains "Finished performance test"
+while true; do
+  last_line=""
+
+  # Check if the file exists
+  if [[ ! -f "$file_path" ]]; then
+    echo "Error: File '$file_path' does not exist."
+  else
+    # Read the last line of the file
+    last_line=$(tail -n 1 "$file_path")
+  fi
+
+  # Check if the last line contains the desired text
+  if [[ "$last_line" == *"Finished performance test"* ]]; then
+    echo $last_line
+    break
+  fi
+
+  # Sleep for a short period to avoid busy-waiting
+  sleep 10
+done
+
+cd ../
+
+echo "Wait indefinitely until Ctrl+C"
 while true; do
     sleep 1
 done
