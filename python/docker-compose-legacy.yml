@@ -1,0 +1,74 @@
+services:
+  proxy-1:
+    image: python:3.10-slim
+    command: /bin/bash -c "pip install -r requirements.txt && python legacy_proxy.py"
+    ports:
+      - "8081:8080"
+    environment:
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=proxy1-1
+      - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
+    volumes:
+      - ./logs:/app/logs
+      - ./legacy_proxy.py:/app/legacy_proxy.py
+      - ./requirements.txt:/app/requirements.txt
+    working_dir: /app
+    networks:
+      - classic-net 
+
+  proxy-2:
+    image: python:3.10-slim
+    command: /bin/bash -c "pip install -r requirements.txt && python legacy_proxy.py"
+    ports:
+      - "8082:8080"
+    environment:
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=proxy1-2
+      - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
+    volumes:
+      - ./logs:/app/logs
+      - ./legacy_proxy.py:/app/legacy_proxy.py
+      - ./requirements.txt:/app/requirements.txt
+    working_dir: /app
+    networks:
+      - classic-net 
+
+  proxy-3:
+    image: python:3.10-slim
+    command: /bin/bash -c "pip install -r requirements.txt && python legacy_proxy.py"
+    ports:
+      - "8083:8080"
+    environment:
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=proxy1-3
+      - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
+    volumes:
+      - ./logs:/app/logs
+      - ./legacy_proxy.py:/app/legacy_proxy.py
+      - ./requirements.txt:/app/requirements.txt
+    working_dir: /app
+    networks:
+      - classic-net
+
+  target-service:
+    image: openjdk:17-slim
+    ports:
+      - "8024:1337"
+    volumes:
+      - ../Simulators:/app
+    working_dir: /app
+    command: java -jar build/libs/Rast-Simulator-all.jar -m 0 -c 0
+    networks:
+      - mqtt-net
+
+networks:
+  classic-net:
+    driver: bridge
+
+volumes:
+  mosquitto-data:
+  mosquitto-logs:
+
