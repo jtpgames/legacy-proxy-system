@@ -1,0 +1,42 @@
+ttern Experiments
+:toc:
+:toc-placement!:
+
+This repository contains experimental scripts and automation tools for research on the Legacy Proxy Pattern, investigating its implementation, performance characteristics, and practical applications in software modernization.
+
+toc::[]
+
+== Overview
+TODO
+
+== Requirements
+
+=== System Requirements
+
+* MacOS 10.15 or higher
+* Homebrew package manager
+
+=== Dependencies
+
+==== Bash Installation
+
+The scripts require Bash 5.0 or higher. Install it via Homebrew:
+
+[source,bash]
+----
+# Install latest bash version
+brew install bash
+
+# Replace buildin version of bash with the new version of bash
+echo 'alias bash="/opt/homebrew/bin/bash"' >> ~/.zshrc
+----
+
+== Usage
+
+[Instructions on how to run the experiments would go here]
+
+== License
+
+This project is licensed under the BSD License - see the LICENSE file for details.
+
+

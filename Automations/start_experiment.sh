@@ -28,6 +28,10 @@ usage() {
     echo "Options:"
     echo "  -c, --clean       Delete local experiment files (results, logs, ...)"
     echo "  -v, --verbose     Enable verbose mode"
+    echo "  -t, --type TYPE   Select docker-compose file type: 'legacy' or 'ng'"
+    echo "                    legacy: Use docker-compose-legacy.yml"
+    echo "                    ng: Use docker-compose-ng.yml"
+    echo "                    (default: legacy)"
     echo "  -h, --help        Show this help message"
     exit 0
 }
@@ -39,8 +43,20 @@ cleanup() {
 
     # Check if docker-compose.yml exists, otherwise change directory
     if [[ ! -f "docker-compose.yml" ]]; then
-        echo "docker-compose.yml not found. Changing directory to ../python..."
-        cd ../python || { echo "Failed to change directory! Exiting."; exit 1; }
+        echo "docker-compose.yml not found."
+        
+        # First check if python directory exists in current directory
+        if [[ -d "python" ]]; then
+            echo "Found python directory in current location. Changing to ./python..."
+            cd python || { echo "Failed to change to ./python directory! Exiting."; exit 1; }
+        # If not, try to go up one level to ../python
+        elif [[ -d "../python" ]]; then
+            echo "Changing directory to ../python..."
+            cd ../python || { echo "Failed to change to ../python directory! Exiting."; exit 1; }
+        else
+            echo "Neither ./python nor ../python directory exists! Cannot find docker-compose.yml. Exiting."
+            exit 1
+        fi
     fi
 
     [[ "$verbose" == true ]] && echo "Stopping all containers..."
@@ -69,14 +85,16 @@ check_services_running() {
 }
 
 cleanup_logs() {
-
     echo "Deleting logs..."
     rm -rfv "logs"
 }
 
+docker ps >/dev/null 2>&1 || { echo "Docker is not installed or running. Please install/start Docker first."; exit 1; }
+
 # Initialize flags
 run_cleanup=false
 verbose=false
+compose_type="legacy"  # Default to legacy
 
 for arg in "$@"; do
     case "$arg" in
@@ -88,19 +106,35 @@ for arg in "$@"; do
             verbose=true
             shift
             ;;
+        --type=*)
+            compose_type="${arg#*=}"
+            shift
+            ;;
+        --type)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                compose_type="$2"
+                shift 2
+            else
+                echo "Error: Argument for $1 is missing" >&2
+                exit 1
+            fi
+            ;;
         --help)
             usage
             ;;
     esac
 done
 
-while getopts ":cvh" opt; do
+while getopts ":cvt:h" opt; do
     case "${opt}" in
         c)
             run_cleanup=true
             ;;
         v)
             verbose=true
+            ;;
+        t)
+            compose_type="$OPTARG"
             ;;
         h)
             usage
@@ -118,8 +152,29 @@ shift $((OPTIND - 1))
 # move to root folder
 cd ../
 
-echo "start legacy proxy system"
+# Validate compose_type
+if [[ "$compose_type" != "legacy" && "$compose_type" != "ng" ]]; then
+    echo "Error: Invalid type '$compose_type'. Must be 'legacy' or 'ng'."
+    exit 1
+fi
+
+# Select appropriate docker-compose file
+if [[ "$compose_type" == "legacy" ]]; then
+    compose_file="docker-compose-legacy.yml"
+    echo "Starting legacy proxy system"
+else
+    compose_file="docker-compose-ng.yml"
+    echo "Starting NG proxy system"
+fi
+
+# move to python folder
 cd python
+
+# Create a symbolic link to the selected compose file
+if [[ -f "docker-compose.yml" ]]; then
+    rm docker-compose.yml
+fi
+ln -s "$compose_file" docker-compose.yml
 
 [[ "$verbose" == true ]] && echo "Verbose mode enabled."
 [[ "$run_cleanup" == true ]] && cleanup_logs
@@ -167,6 +222,7 @@ screen -S load_tester_screen -d -m bash -c "$cmd_ad_workload"
 
 cd ../
 
+# move to python folder
 cd python
 echo -e "\nServices are running in docker containers."
 docker-compose ps
@@ -203,7 +259,51 @@ while true; do
   sleep 10
 done
 
+echo "collect the results"
+
+# Set the destination log folder based on the experiment type value
+dst_log_folder="$compose_type"
+
+echo "from load tester"
+
+./extract_connection_errors.sh
+#./export_sysstats.sh alarm_system.sar
+#./export_sysstats.sh arc.sar
+
+mkdir -p "$dst_log_folder"
+mv -v *.log "$dst_log_folder/"
+mv -v *.out "$dst_log_folder/"
+#mv -v *.sar "$dst_log_folder/"
+#mv -v *.svg "$dst_log_folder/"
+
+echo "from Simulator"
+cd ../Simulators
+
+# Create the destination folder and move the log file
+mkdir -p "$dst_log_folder" && mv -v ars_simulation.log "$dst_log_folder/gs_simulation.log"
+
+# move back to root folder
 cd ../
+
+# Select appropriate docker-compose file
+if [[ "$compose_type" == "legacy" ]]; then
+    target_folder_for_logs="Baseline_Experiment"
+else
+    target_folder_for_logs="NG_Experiment"
+fi
+
+echo "move to locust folder and clean old results"
+cd locust_scripts
+./delete_results.sh
+cd ../
+
+echo "Moving all log files to Automations/$target_folder_for_logs ..."
+
+mkdir -pv "Automations/$target_folder_for_logs/LoadTester_Logs"
+mv -v "locust_scripts/$dst_log_folder/"* "Automations/$target_folder_for_logs/LoadTester_Logs/"
+
+mkdir -pv "Automations/$target_folder_for_logs/Simulator_Logs"
+mv -v "Simulators/$dst_log_folder/"* "Automations/$target_folder_for_logs/Simulator_Logs"
 
 echo "Wait indefinitely until Ctrl+C"
 while true; do

@@ -44,9 +44,9 @@ class Message(BaseModel):
 
 def on_message(message: str) -> Tuple[bool, str]:
         try:
-            # response = requests.post(TARGET_URL, json=payload)
-            # response.raise_for_status()
-            # logger.info(f"Successfully forwarded message to {TARGET_URL}")
+            response = requests.post(TARGET_URL, json=message)
+            response.raise_for_status()
+            logger.info(f"Successfully forwarded message to {TARGET_URL}")
             return True, ""
         except RequestException as e:
             logger.error(f"Failed to forward message to HTTP endpoint: {e}")

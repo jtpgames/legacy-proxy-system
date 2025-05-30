@@ -7,7 +7,7 @@ services:
     environment:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
-      - SERVICE_NAME=proxy1-1
+      - SERVICE_NAME=proxy-1
       - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
     volumes:
       - ./logs:/app/logs
@@ -25,7 +25,7 @@ services:
     environment:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
-      - SERVICE_NAME=proxy1-2
+      - SERVICE_NAME=proxy-2
       - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
     volumes:
       - ./logs:/app/logs
@@ -43,7 +43,7 @@ services:
     environment:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
-      - SERVICE_NAME=proxy1-3
+      - SERVICE_NAME=proxy-3
       - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
     volumes:
       - ./logs:/app/logs
@@ -62,7 +62,7 @@ services:
     working_dir: /app
     command: java -jar build/libs/Rast-Simulator-all.jar -m 0 -c 0
     networks:
-      - mqtt-net
+      - classic-net
 
 networks:
   classic-net:

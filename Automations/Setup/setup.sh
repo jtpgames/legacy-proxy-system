@@ -38,7 +38,7 @@ function create_and_activate_venv_in_current_dir {
 }
 
 # move to root folder
-#cd ../../
+cd ../../
 
 echo "Python:"
 cd python
