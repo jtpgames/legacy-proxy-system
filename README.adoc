@@ -1,4 +1,4 @@
-ttern Experiments
+Legacy Proxy Pattern Experiments
 :toc:
 :toc-placement!:
 
