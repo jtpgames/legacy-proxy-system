@@ -62,10 +62,68 @@ cleanup() {
     [[ "$verbose" == true ]] && echo "Stopping all containers..."
     docker-compose down --remove-orphans
 
-    screen -S prod_workload_screen -X quit
-    screen -S load_tester_screen -X quit
-    echo "shutting down load tester and waiting for 10 seconds"
-    sleep 10
+    echo "collect the results"
+
+    echo "from legacy_proxies"
+  
+    # here we are still in the python folder
+    mkdir -pv "../Automations/$target_folder_for_logs/LegacyProxy_Logs"
+    mv -v "logs/"* "../Automations/$target_folder_for_logs/LegacyProxy_Logs"
+
+    # change to target log folder for docker logs
+    cd "../Automations/$target_folder_for_logs"
+
+    echo "Stopping locust_scripts runner..."
+    docker logs prod_workload_container > prod_workload_container.log 2>&1
+    docker logs ad_workload_container > ad_workload_container.log 2>&1
+
+    docker stop prod_workload_container ad_workload_container 2>/dev/null || true
+    docker rm prod_workload_container ad_workload_container 2>/dev/null || true
+
+    # change back to root folder
+    cd ../../
+
+    # Set the destination log folder based on the experiment type value
+    dst_log_folder="experiment_logs_$compose_type"
+
+    echo "from load tester"
+    cd locust_scripts
+
+    # Create the destination folder
+    mkdir -p "$dst_log_folder"
+
+    # move to prod_workload logs folder
+    cd locust_logs/prod_workload
+    mv -v *.log "../../$dst_log_folder/"
+    # move back to locust_scripts folder
+    cd ../../
+
+    # move to ad_workload logs folder
+    cd locust_logs/ad_workload
+    mv -v *.log "../../$dst_log_folder/"
+    # move back to locust_scripts folder
+    cd ../../
+
+    cd $dst_log_folder
+    bash ../extract_connection_errors.sh
+    cd ../
+
+    echo "from Simulator"
+    cd ../Simulators
+
+    # Create the destination folder and move the log file
+    mkdir -p "$dst_log_folder" && mv -v ars_simulation.log "$dst_log_folder/gs_simulation.log"
+
+    # move back to root folder
+    cd ../
+
+    echo "Moving all log files to Automations/$target_folder_for_logs ..."
+
+    mkdir -pv "Automations/$target_folder_for_logs/LoadTester_Logs"
+    mv -v "locust_scripts/$dst_log_folder/"* "Automations/$target_folder_for_logs/LoadTester_Logs/"
+
+    mkdir -pv "Automations/$target_folder_for_logs/Simulator_Logs"
+    mv -v "Simulators/$dst_log_folder/"* "Automations/$target_folder_for_logs/Simulator_Logs"
 
     [[ "$verbose" == true ]] && echo "Cleanup completed."
     
@@ -167,6 +225,13 @@ else
     echo "Starting NG proxy system"
 fi
 
+# set folder for log files based on compose_type
+if [[ "$compose_type" == "legacy" ]]; then
+    target_folder_for_logs="Baseline_Experiment"
+else
+    target_folder_for_logs="NG_Experiment"
+fi
+
 # move to python folder
 cd python
 
@@ -206,20 +271,37 @@ set +e
 
 # move to locust folder
 cd locust_scripts
-./delete_results.sh
 
-activate_venv_in_current_dir
+# Get the full path of locust_scripts directory for volume mounting
+LOCUST_SCRIPTS_DIR="$(pwd)"
+echo "Using locust scripts directory: $LOCUST_SCRIPTS_DIR"
 
+# Create logs directories if they do not exist
+mkdir -p locust_logs/prod_workload
+mkdir -p locust_logs/ad_workload
+
+# Delete any logs remaining from the previous execution
+rm -fv locust_logs/prod_workload/* 
+rm -fv locust_logs/ad_workload/* 
+
+cmd_prod_workload='python executor.py locust/gen_gs_prod_workload.py -u http://host.docker.internal:8084'
 echo "Launching Production Workload directly on the last ARS component"
-screen -S prod_workload_screen -d -m bash -c "python executor.py locust/gen_gs_prod_workload.py -u http://localhost:8084"
+docker run -d \
+  --name prod_workload_container \
+  -v "$LOCUST_SCRIPTS_DIR/locust_logs/prod_workload:/logs" \
+  locust_scripts_runner:latest \
+  bash -c "$cmd_prod_workload"
 
 echo "Launching Alarm Device workload to the first ARS component"
-cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload.py -u http://localhost:8081 -m 500 -p'
+cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload.py -u http://host.docker.internal:8081 -m 500 -p'
 
-cmd_ad_workload="$cmd_ad_workload &> /dev/null"
+docker run -d \
+  --name ad_workload_container \
+  -v "$LOCUST_SCRIPTS_DIR/locust_logs/ad_workload:/logs" \
+  locust_scripts_runner:latest \
+  bash -c "$cmd_ad_workload"
 
-screen -S load_tester_screen -d -m bash -c "$cmd_ad_workload"
-
+# move to root folder
 cd ../
 
 # move to python folder
@@ -230,12 +312,15 @@ echo -e "\nTo view logs:"
 echo "docker-compose logs -f"
 echo -e "\nPress Ctrl+C to stop all services and cleanup."
 
+# move to root folder
 cd ../
+
+# move to locust_scripts folder
 cd locust_scripts
 
 echo "Begin polling the locust-parameter-variation.log to check if the load test was finished ('Finished performance test.')"
 
-file_path="locust-parameter-variation.log"
+file_path="locust_logs/ad_workload/locust-parameter-variation.log"
 
 # Loop until the last line contains "Finished performance test"
 while true; do
@@ -259,53 +344,6 @@ while true; do
   sleep 10
 done
 
-echo "collect the results"
-
-# Set the destination log folder based on the experiment type value
-dst_log_folder="$compose_type"
-
-echo "from load tester"
-
-./extract_connection_errors.sh
-#./export_sysstats.sh alarm_system.sar
-#./export_sysstats.sh arc.sar
-
-mkdir -p "$dst_log_folder"
-mv -v *.log "$dst_log_folder/"
-mv -v *.out "$dst_log_folder/"
-#mv -v *.sar "$dst_log_folder/"
-#mv -v *.svg "$dst_log_folder/"
-
-echo "from Simulator"
-cd ../Simulators
-
-# Create the destination folder and move the log file
-mkdir -p "$dst_log_folder" && mv -v ars_simulation.log "$dst_log_folder/gs_simulation.log"
-
-# move back to root folder
-cd ../
-
-# Select appropriate docker-compose file
-if [[ "$compose_type" == "legacy" ]]; then
-    target_folder_for_logs="Baseline_Experiment"
-else
-    target_folder_for_logs="NG_Experiment"
-fi
-
-echo "move to locust folder and clean old results"
-cd locust_scripts
-./delete_results.sh
-cd ../
-
-echo "Moving all log files to Automations/$target_folder_for_logs ..."
-
-mkdir -pv "Automations/$target_folder_for_logs/LoadTester_Logs"
-mv -v "locust_scripts/$dst_log_folder/"* "Automations/$target_folder_for_logs/LoadTester_Logs/"
-
-mkdir -pv "Automations/$target_folder_for_logs/Simulator_Logs"
-mv -v "Simulators/$dst_log_folder/"* "Automations/$target_folder_for_logs/Simulator_Logs"
-
-echo "Wait indefinitely until Ctrl+C"
-while true; do
-    sleep 1
-done
+echo "Experiment completed."
+sleep 1
+cleanup

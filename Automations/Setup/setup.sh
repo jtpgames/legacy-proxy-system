@@ -40,21 +40,27 @@ function create_and_activate_venv_in_current_dir {
 # move to root folder
 cd ../../
 
-echo "Python:"
-cd python
-create_and_activate_venv_in_current_dir
+# echo "Python:"
+# cd python
+# create_and_activate_venv_in_current_dir
+#
+# # move to root folder
+# cd ..
+#
+# echo "locust_scripts:"
+# cd locust_scripts
+# create_and_activate_venv_in_current_dir
+#
+# # move to root folder
+# cd ..
+#
+# echo "All Python virtual environments created and requirements installed."
 
-# move to root folder
-cd ..
+echo "Building Docker image for locust_scripts"
+docker buildx build -t locust_scripts_runner:latest -f Automations/locust_scripts_runner_dockerfile .
+cd ../
 
-echo "locust_scripts:"
-cd locust_scripts
-create_and_activate_venv_in_current_dir
-
-# move to root folder
-cd ..
-
-echo "All Python virtual environments created and requirements installed."
+exit 1
 
 cd Automations
 
@@ -62,4 +68,7 @@ cd Automations
 echo "Building ARS Simulator ..."
 docker buildx build -t simulator_builder -f build_simulator_dockerfile .
 docker run --rm -v "$(pwd)/../Simulators:/app" simulator_builder ./gradlew shadowJar -PmainClass=ArsKt
+
+cd ..
+
 

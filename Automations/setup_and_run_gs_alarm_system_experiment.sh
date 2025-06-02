@@ -13,8 +13,8 @@ show_help() {
 # Function to clean directories
 clean_start() {
   echo "Cleaning directories..."
-  rm -rv Baseline_Experiment/Simulator_Logs
-  rm -rv Baseline_Experiment/LoadTester_Logs
+  rm -rv Baseline_Experiment/*
+  rm -rv NG_Experiment/*
 }
 
 # Initialize flags
@@ -47,14 +47,18 @@ run_baseline_experiment() {
 
 # Function to run experiment with broker scripts
 run_broker_experiment() {
-  echo "TODO"
+  if [[ "$run_cleanup" == true ]]; then
+    ./start_experiment.sh -c -t ng
+  else
+    ./start_experiment.sh -t ng
+  fi
 }
 
 # List of functions to be executed
 functions=(
-  #"run_setup"
+  "run_setup"
   "run_baseline_experiment"
-  #"run_broker_experiment"
+  "run_broker_experiment"
 )
 
 source run_experiment.sh
