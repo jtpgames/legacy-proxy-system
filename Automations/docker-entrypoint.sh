@@ -29,8 +29,9 @@ function activate_venv_in_current_dir {
 }
 
 echo "Effective file descriptor limit: $(ulimit -n)"
-# Optional: try raising soft limit if allowed
+echo "try raising soft limit if allowed"
 ulimit -n 65536 || echo "Could not raise nofile limit"
+echo "Effective file descriptor limit: $(ulimit -n)"
 
 echo "Initial environment:"
 echo "PATH: $PATH"

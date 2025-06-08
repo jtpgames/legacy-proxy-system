@@ -328,8 +328,11 @@ while true; do
 
   # Check if the file exists
   if [[ ! -f "$file_path" ]]; then
-    echo "Error: File '$file_path' does not exist."
+    echo "Warning: File '$file_path' does not exist. Retrying ..."
   else
+    if [[ "$last_line" == "" ]]; then
+      echo "File '$file_path' found. Waiting until performance test is finished ..."
+    fi
     # Read the last line of the file
     last_line=$(tail -n 1 "$file_path")
   fi
