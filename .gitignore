@@ -2,3 +2,5 @@
 venv/
 logs/
 python/docker-compose.yml
+Baseline_Experiment/
+NG_Experiment/
