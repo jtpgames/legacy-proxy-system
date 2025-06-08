@@ -3,3 +3,5 @@ paho-mqtt==2.1.0
 pydantic==2.10.6
 requests==2.32.3
 uvicorn==0.34.0
+docker==7.1.0
+typer==0.16.0
