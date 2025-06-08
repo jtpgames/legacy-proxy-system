@@ -323,14 +323,13 @@ echo "Begin polling the locust-parameter-variation.log to check if the load test
 file_path="locust_logs/ad_workload/locust-parameter-variation.log"
 
 # Loop until the last line contains "Finished performance test"
+last_line=""
 while true; do
-  last_line=""
-
   # Check if the file exists
   if [[ ! -f "$file_path" ]]; then
     echo "Warning: File '$file_path' does not exist. Retrying ..."
   else
-    if [[ "$last_line" == "" ]]; then
+    if [[ -z "$last_line" ]]; then
       echo "File '$file_path' found. Waiting until performance test is finished ..."
     fi
     # Read the last line of the file
