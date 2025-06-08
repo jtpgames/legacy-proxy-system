@@ -40,13 +40,13 @@ function create_and_activate_venv_in_current_dir {
 # move to root folder
 cd ../../
 
-# echo "Python:"
-# cd python
-# create_and_activate_venv_in_current_dir
-#
-# # move to root folder
-# cd ..
-#
+echo "Python:"
+cd python
+create_and_activate_venv_in_current_dir
+
+# move to root folder
+cd ..
+
 # echo "locust_scripts:"
 # cd locust_scripts
 # create_and_activate_venv_in_current_dir
@@ -54,7 +54,7 @@ cd ../../
 # # move to root folder
 # cd ..
 #
-# echo "All Python virtual environments created and requirements installed."
+echo "All Python virtual environments created and requirements installed."
 
 echo "Building Docker image for locust_scripts"
 docker buildx build -t locust_scripts_runner:latest -f Automations/locust_scripts_runner_dockerfile .
