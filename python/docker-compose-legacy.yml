@@ -56,7 +56,7 @@ services:
   target-service:
     image: openjdk:17-slim
     ports:
-      - "8024:1337"
+      - "8084:1337"
     volumes:
       - ../Simulators:/app
     working_dir: /app
