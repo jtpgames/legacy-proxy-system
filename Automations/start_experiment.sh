@@ -59,6 +59,13 @@ cleanup() {
         fi
     fi
 
+    # At this point, the current working directory is /python
+
+    echo "Stopping Fault injectors and terminating screen session..."
+    pgrep -f 'python inject_fault.py' | xargs kill -TERM
+    sleep 1
+    screen -S inject_fault_session -X quit 2>/dev/null || true
+
     [[ "$verbose" == true ]] && echo "Stopping all containers..."
     docker-compose down --remove-orphans
 
@@ -69,6 +76,8 @@ cleanup() {
     # here we are still in the python folder
     mkdir -pv "../Automations/$target_folder_for_logs/LegacyProxy_Logs"
     mv -v "logs/"* "../Automations/$target_folder_for_logs/LegacyProxy_Logs"
+
+    mv -v "inject_fault.log" "../Automations/$target_folder_for_logs/"
 
     # change to target log folder for docker logs
     cd "../Automations/$target_folder_for_logs"
@@ -260,9 +269,22 @@ echo "Starting services with docker-compose..."
 docker-compose build
 docker-compose up -d
 
+echo "Fault Injector starting ..."
+activate_venv_in_current_dir
+# screen -dmS inject_fault_session bash -c 'python -u inject_fault.py --target-service target-service --fault-mode stop --duration-down 10 --duration-up 30 >inject_fault.log 2>&1'
+
+screen -dmS inject_fault_session bash -c \
+'python inject_fault.py --target-service target-service \
+ --fault-mode stop --duration-down 10 --duration-up 30 \
+ >inject_fault.log 2>&1'
+
+echo "Fault Injector started"
+
 # Wait for services to be ready
 echo "Waiting for services to start..."
 sleep 10
+
+echo $(screen -ls)
 
 # move to root folder
 cd ..
