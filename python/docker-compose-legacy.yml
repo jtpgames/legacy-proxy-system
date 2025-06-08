@@ -68,7 +68,3 @@ networks:
   classic-net:
     driver: bridge
 
-volumes:
-  mosquitto-data:
-  mosquitto-logs:
-
