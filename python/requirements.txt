@@ -5,3 +5,4 @@ requests==2.32.3
 uvicorn==0.34.0
 docker==7.1.0
 typer==0.16.0
+APScheduler==3.11.0
