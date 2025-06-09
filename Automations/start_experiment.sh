@@ -271,7 +271,6 @@ docker-compose up -d
 
 echo "Fault Injector starting ..."
 activate_venv_in_current_dir
-# screen -dmS inject_fault_session bash -c 'python -u inject_fault.py --target-service target-service --fault-mode stop --duration-down 10 --duration-up 30 >inject_fault.log 2>&1'
 
 screen -dmS inject_fault_session bash -c \
 'python inject_fault.py --target-service target-service \
