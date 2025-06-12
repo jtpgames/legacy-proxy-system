@@ -8,6 +8,7 @@ services:
     volumes:
       - mosquitto-data:/mosquitto/data
       - mosquitto-logs:/mosquitto/log
+      - /etc/localtime:/etc/localtime:ro
     networks:
       - mqtt-net
 
@@ -27,6 +28,7 @@ services:
       - ./logs:/app/logs
       - ./legacy_proxy_1.py:/app/legacy_proxy_1.py
       - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
       - mosquitto
@@ -49,6 +51,7 @@ services:
       - ./logs:/app/logs
       - ./legacy_proxy_1.py:/app/legacy_proxy_1.py
       - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
       - mosquitto
@@ -71,6 +74,7 @@ services:
       - ./logs:/app/logs
       - ./legacy_proxy_1.py:/app/legacy_proxy_1.py
       - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
       - mosquitto
@@ -91,6 +95,7 @@ services:
       - ./logs:/app/logs
       - ./legacy_proxy_2.py:/app/legacy_proxy_2.py
       - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
       - mosquitto
@@ -112,6 +117,7 @@ services:
       - ./logs:/app/logs
       - ./legacy_proxy_2.py:/app/legacy_proxy_2.py
       - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
       - mosquitto
@@ -133,6 +139,7 @@ services:
       - ./logs:/app/logs
       - ./legacy_proxy_2.py:/app/legacy_proxy_2.py
       - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
       - mosquitto
@@ -146,6 +153,7 @@ services:
       - "8084:1337"
     volumes:
       - ../Simulators:/app
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     command: java -jar build/libs/Rast-Simulator-all.jar -m 0 -c 0
     networks:

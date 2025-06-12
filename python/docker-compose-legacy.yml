@@ -13,6 +13,7 @@ services:
       - ./logs:/app/logs
       - ./legacy_proxy.py:/app/legacy_proxy.py
       - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     networks:
       - classic-net 
@@ -31,6 +32,7 @@ services:
       - ./logs:/app/logs
       - ./legacy_proxy.py:/app/legacy_proxy.py
       - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     networks:
       - classic-net 
@@ -49,6 +51,7 @@ services:
       - ./logs:/app/logs
       - ./legacy_proxy.py:/app/legacy_proxy.py
       - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     networks:
       - classic-net
@@ -59,6 +62,7 @@ services:
       - "8084:1337"
     volumes:
       - ../Simulators:/app
+      - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     command: java -jar build/libs/Rast-Simulator-all.jar -m 0 -c 0
     networks:
