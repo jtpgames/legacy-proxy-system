@@ -32,6 +32,7 @@ usage() {
     echo "                    legacy: Use docker-compose-legacy.yml"
     echo "                    ng: Use docker-compose-ng.yml"
     echo "                    (default: legacy)"
+    echo "  --with_fault_injector  Run Fault Injector"
     echo "  -h, --help        Show this help message"
     exit 0
 }
@@ -44,17 +45,15 @@ cleanup() {
     # Check if docker-compose.yml exists, otherwise change directory
     if [[ ! -f "docker-compose.yml" ]]; then
         echo "docker-compose.yml not found."
-        
+       
+        cd "$root_folder"
+
         # First check if python directory exists in current directory
         if [[ -d "python" ]]; then
             echo "Found python directory in current location. Changing to ./python..."
             cd python || { echo "Failed to change to ./python directory! Exiting."; exit 1; }
-        # If not, try to go up one level to ../python
-        elif [[ -d "../python" ]]; then
-            echo "Changing directory to ../python..."
-            cd ../python || { echo "Failed to change to ../python directory! Exiting."; exit 1; }
         else
-            echo "Neither ./python nor ../python directory exists! Cannot find docker-compose.yml. Exiting."
+            echo "python does not directory exist! Cannot find docker-compose.yml. Exiting."
             exit 1
         fi
     fi
@@ -80,7 +79,7 @@ cleanup() {
     mv -v "inject_fault.log" "../Automations/$target_folder_for_logs/"
 
     # change to target log folder for docker logs
-    cd "../Automations/$target_folder_for_logs"
+    cd "$root_folder/Automations/$target_folder_for_logs"
 
     echo "Stopping locust_scripts runner..."
     docker logs prod_workload_container > prod_workload_container.log 2>&1
@@ -90,7 +89,7 @@ cleanup() {
     docker rm prod_workload_container ad_workload_container 2>/dev/null || true
 
     # change back to root folder
-    cd ../../
+    cd "$root_folder"
 
     # Set the destination log folder based on the experiment type value
     dst_log_folder="experiment_logs_$compose_type"
@@ -118,13 +117,13 @@ cleanup() {
     cd ../
 
     echo "from Simulator"
-    cd ../Simulators
+    cd "$root_folder/Simulators"
 
     # Create the destination folder and move the log file
     mkdir -p "$dst_log_folder" && mv -v ars_simulation.log "$dst_log_folder/gs_simulation.log"
 
     # move back to root folder
-    cd ../
+    cd "$root_folder"
 
     echo "Moving all log files to Automations/$target_folder_for_logs ..."
 
@@ -162,6 +161,7 @@ docker ps >/dev/null 2>&1 || { echo "Docker is not installed or running. Please 
 run_cleanup=false
 verbose=false
 compose_type="legacy"  # Default to legacy
+with_fault_injector=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -185,6 +185,10 @@ for arg in "$@"; do
                 echo "Error: Argument for $1 is missing" >&2
                 exit 1
             fi
+            ;;
+        --with_fault_injector)
+            with_fault_injector=true
+            shift
             ;;
         --help)
             usage
@@ -216,8 +220,12 @@ done
 # Shift past processed options
 shift $((OPTIND - 1))
 
+automations_folder=$(pwd)
+
 # move to root folder
 cd ../
+
+root_folder=$(pwd)
 
 # Validate compose_type
 if [[ "$compose_type" != "legacy" && "$compose_type" != "ng" ]]; then
@@ -240,6 +248,19 @@ if [[ "$compose_type" == "legacy" ]]; then
 else
     target_folder_for_logs="NG_Experiment"
 fi
+
+# get current date-time in a UNIX-safe format (e.g., 2025-06-10_14-23-45)
+timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
+
+# determine fault injector subdirectory
+if [[ "$with_fault_injector" == "true" ]]; then
+    fault_injector_subdir="with_fault_injector"
+else
+    fault_injector_subdir="without_fault_injector"
+fi
+
+# compose the full path
+target_folder_for_logs="$target_folder_for_logs/$timestamp/$fault_injector_subdir"
 
 # move to python folder
 cd python
@@ -269,15 +290,20 @@ echo "Starting services with docker-compose..."
 docker-compose build
 docker-compose up -d
 
-echo "Fault Injector starting ..."
-activate_venv_in_current_dir
+touch inject_fault.log
+if [[ "$with_fault_injector" == "true" ]]; then
+    echo "Fault Injector starting ..."
+    activate_venv_in_current_dir
 
-screen -dmS inject_fault_session bash -c \
-'python inject_fault.py --target-service target-service \
- --fault-mode stop --duration-down 10 --duration-up 30 \
- >inject_fault.log 2>&1'
+    screen -dmS inject_fault_session bash -c \
+    'python inject_fault.py --target-service target-service \
+     --fault-mode stop --duration-down 10 --duration-up 30 \
+     >inject_fault.log 2>&1'
 
-echo "Fault Injector started"
+    echo "Fault Injector started"
+else
+    echo "Running without Fault Injector"
+fi
 
 # Wait for services to be ready
 echo "Waiting for services to start..."
@@ -307,9 +333,11 @@ rm -fv locust_logs/ad_workload/*
 
 cmd_prod_workload='python executor.py locust/gen_gs_prod_workload.py -u http://host.docker.internal:8084'
 echo "Launching Production Workload directly on the last ARS component"
+
 docker run -d \
   --name prod_workload_container \
   -v "$LOCUST_SCRIPTS_DIR/locust_logs/prod_workload:/logs" \
+  -v /etc/localtime:/etc/localtime:ro \
   locust_scripts_runner:latest \
   bash -c "$cmd_prod_workload"
 
@@ -319,6 +347,7 @@ cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device
 docker run -d \
   --name ad_workload_container \
   -v "$LOCUST_SCRIPTS_DIR/locust_logs/ad_workload:/logs" \
+  -v /etc/localtime:/etc/localtime:ro \
   locust_scripts_runner:latest \
   bash -c "$cmd_ad_workload"
 
