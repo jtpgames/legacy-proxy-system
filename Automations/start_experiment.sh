@@ -331,7 +331,7 @@ if [[ "$with_fault_injector" == "true" ]]; then
       screen -dmS inject_fault_session_2 bash -c \
         "python inject_fault.py --target-service proxy-1-1 \
         --fault-mode stop --duration-down 10 --duration-up 10 \
-        > \"$fault_injector_logfile_name_proxy_1-1\" 2>&1"
+        > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
     fi
     
     echo "Fault Injectors started"
