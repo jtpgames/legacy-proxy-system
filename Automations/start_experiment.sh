@@ -63,82 +63,92 @@ cleanup() {
     echo "Stopping Fault injectors and terminating screen session..."
     pgrep -f 'python inject_fault.py' | xargs kill -TERM
     sleep 1
-    screen -S inject_fault_session -X quit 2>/dev/null || true
+    screen -S inject_fault_session_1 -X quit 2>/dev/null || true
+    screen -S inject_fault_session_2 -X quit 2>/dev/null || true
 
-    [[ "$verbose" == true ]] && echo "Stopping all containers..."
+    echo "Stopping all containers..."
     docker-compose down --remove-orphans
 
-    echo "collect the results"
-
-    echo "from legacy_proxies"
-  
-    # here we are still in the python folder
-    mkdir -pv "../Automations/$target_folder_for_logs/LegacyProxy_Logs"
-    mv -v "logs/"* "../Automations/$target_folder_for_logs/LegacyProxy_Logs"
-
-    mv -v "inject_fault.log" "../Automations/$target_folder_for_logs/"
-
-    # change to target log folder for docker logs
-    cd "$root_folder/Automations/$target_folder_for_logs"
-
-    echo "Stopping locust_scripts runner..."
-    docker logs prod_workload_container > prod_workload_container.log 2>&1
-    docker logs ad_workload_container > ad_workload_container.log 2>&1
-
-    docker stop prod_workload_container ad_workload_container 2>/dev/null || true
-    docker rm prod_workload_container ad_workload_container 2>/dev/null || true
-
-    # change back to root folder
-    cd "$root_folder"
-
-    # Set the destination log folder based on the experiment type value
-    dst_log_folder="experiment_logs_$compose_type"
-
-    echo "from load tester"
-    cd locust_scripts
-
-    # Create the destination folder
-    mkdir -p "$dst_log_folder"
-
-    # move to prod_workload logs folder
-    cd locust_logs/prod_workload
-    mv -v *.log "../../$dst_log_folder/"
-    # move back to locust_scripts folder
-    cd ../../
-
-    # move to ad_workload logs folder
-    cd locust_logs/ad_workload
-    mv -v *.log "../../$dst_log_folder/"
-    # move back to locust_scripts folder
-    cd ../../
-
-    cd $dst_log_folder
-    bash ../extract_connection_errors.sh
-    cd ../
-
-    echo "from Simulator"
-    cd "$root_folder/Simulators"
-
-    # Create the destination folder and move the log file
-    mkdir -p "$dst_log_folder" && mv -v ars_simulation.log "$dst_log_folder/gs_simulation.log"
-
-    # move back to root folder
-    cd "$root_folder"
-
-    echo "Moving all log files to Automations/$target_folder_for_logs ..."
-
-    mkdir -pv "Automations/$target_folder_for_logs/LoadTester_Logs"
-    mv -v "locust_scripts/$dst_log_folder/"* "Automations/$target_folder_for_logs/LoadTester_Logs/"
-
-    mkdir -pv "Automations/$target_folder_for_logs/Simulator_Logs"
-    mv -v "Simulators/$dst_log_folder/"* "Automations/$target_folder_for_logs/Simulator_Logs"
-
-    [[ "$verbose" == true ]] && echo "Cleanup completed."
-    
-    # Only exit if no_exit parameter is not provided
     if [[ "${1}" != "no_exit" ]]; then
-        exit 0
+      echo "collect the results"
+
+      echo "from legacy_proxies"
+
+      # here we are still in the python folder
+      mkdir -pv "$root_folder/Automations/$target_folder_for_logs/LegacyProxy_Logs"
+      mv -v "logs/"* "$root_folder/Automations/$target_folder_for_logs/LegacyProxy_Logs"
+
+      for file in ${fault_injector_logfile_base_name}*.log; do
+        mv -v "$file" "$root_folder/Automations/$target_folder_for_logs/"
+      done
+
+      # change to target log folder for docker logs
+      cd "$root_folder/Automations/$target_folder_for_logs"
+
+      echo "Stopping locust_scripts runner..."
+      docker logs prod_workload_container > prod_workload_container.log 2>&1
+      docker logs ad_workload_container > ad_workload_container.log 2>&1
+
+      docker stop prod_workload_container ad_workload_container 2>/dev/null || true
+      docker rm prod_workload_container ad_workload_container 2>/dev/null || true
+
+      # change back to root folder
+      cd "$root_folder"
+
+      # Set the destination log folder based on the experiment type value
+      dst_log_folder="experiment_logs_$compose_type"
+
+      echo "from load tester"
+      cd locust_scripts
+
+      # Create the destination folder
+      mkdir -p "$dst_log_folder"
+
+      # move to prod_workload logs folder
+      cd locust_logs/prod_workload
+      mv -v *.log "../../$dst_log_folder/"
+      # move back to locust_scripts folder
+      cd ../../
+
+      # move to ad_workload logs folder
+      cd locust_logs/ad_workload
+      mv -v *.log "../../$dst_log_folder/"
+      # move back to locust_scripts folder
+      cd ../../
+
+      cd $dst_log_folder
+      bash ../extract_connection_errors.sh
+      cd ../
+
+      echo "from Simulator"
+      cd "$root_folder/Simulators"
+
+      # Create the destination folder and move the log file
+      mkdir -p "$dst_log_folder" && mv -v ars_simulation.log "$dst_log_folder/gs_simulation.log"
+
+      # move back to root folder
+      cd "$root_folder"
+
+      echo "Moving all log files to Automations/$target_folder_for_logs ..."
+
+      mkdir -pv "Automations/$target_folder_for_logs/LoadTester_Logs"
+      mv -v "locust_scripts/$dst_log_folder/"* "Automations/$target_folder_for_logs/LoadTester_Logs/"
+
+      mkdir -pv "Automations/$target_folder_for_logs/Simulator_Logs"
+      mv -v "Simulators/$dst_log_folder/"* "Automations/$target_folder_for_logs/Simulator_Logs"
+
+      cd "$root_folder/locust_scripts"
+      activate_venv_in_current_dir
+      # python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/worker_log_500.1.log"
+      python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/worker_log_500.1.log" \
+        "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
+        "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service"
+
+      exit 0
     fi
+
+    echo "Cleanup completed."
+    set -e
 }
 
 # Function to check if services are running
@@ -155,12 +165,18 @@ cleanup_logs() {
     rm -rfv "logs"
 }
 
+log() {
+  if [[ "$verbose" == true ]]; then
+    echo "$@"
+  fi
+}
+
 docker ps >/dev/null 2>&1 || { echo "Docker is not installed or running. Please install/start Docker first."; exit 1; }
 
 # Initialize flags
 run_cleanup=false
 verbose=false
-compose_type="legacy"  # Default to legacy
+experiment_type="legacy"  # Default to legacy
 with_fault_injector=false
 
 for arg in "$@"; do
@@ -174,12 +190,12 @@ for arg in "$@"; do
             shift
             ;;
         --type=*)
-            compose_type="${arg#*=}"
+            experiment_type="${arg#*=}"
             shift
             ;;
         --type)
             if [[ -n "$2" && "$2" != -* ]]; then
-                compose_type="$2"
+                experiment_type="$2"
                 shift 2
             else
                 echo "Error: Argument for $1 is missing" >&2
@@ -205,7 +221,7 @@ while getopts ":cvt:h" opt; do
             verbose=true
             ;;
         t)
-            compose_type="$OPTARG"
+            experiment_type="$OPTARG"
             ;;
         h)
             usage
@@ -227,14 +243,14 @@ cd ../
 
 root_folder=$(pwd)
 
-# Validate compose_type
-if [[ "$compose_type" != "legacy" && "$compose_type" != "ng" ]]; then
-    echo "Error: Invalid type '$compose_type'. Must be 'legacy' or 'ng'."
+# Validate experiment_type
+if [[ "$experiment_type" != "legacy" && "$experiment_type" != "ng" ]]; then
+    echo "Error: Invalid type '$experiment_type'. Must be 'legacy' or 'ng'."
     exit 1
 fi
 
 # Select appropriate docker-compose file
-if [[ "$compose_type" == "legacy" ]]; then
+if [[ "$experiment_type" == "legacy" ]]; then
     compose_file="docker-compose-legacy.yml"
     echo "Starting legacy proxy system"
 else
@@ -242,8 +258,8 @@ else
     echo "Starting NG proxy system"
 fi
 
-# set folder for log files based on compose_type
-if [[ "$compose_type" == "legacy" ]]; then
+# set folder for log files based on experiment_type 
+if [[ "$experiment_type" == "legacy" ]]; then
     target_folder_for_logs="Baseline_Experiment"
 else
     target_folder_for_logs="NG_Experiment"
@@ -281,6 +297,7 @@ mkdir -p logs
 if check_services_running; then
     echo "Cleaning up existing services before starting..."
     cleanup "no_exit"
+    cd "$root_folder/python"
 fi
 
 # Setup trap for Ctrl+C
@@ -290,19 +307,36 @@ echo "Starting services with docker-compose..."
 docker-compose build
 docker-compose up -d
 
-touch inject_fault.log
+fault_injector_logfile_base_name="fault_injector"
+fault_injector_logfile_name_target_service="${fault_injector_logfile_base_name}_target_service.log"
+fault_injector_logfile_name_proxy_1="${fault_injector_logfile_base_name}_proxy_1.log"
+
+touch $fault_injector_logfile_name_target_service
+touch $fault_injector_logfile_name_proxy_1
 if [[ "$with_fault_injector" == "true" ]]; then
     echo "Fault Injector starting ..."
     activate_venv_in_current_dir
 
-    screen -dmS inject_fault_session bash -c \
-    'python inject_fault.py --target-service target-service \
+    screen -dmS inject_fault_session_1 bash -c \
+    "python inject_fault.py --target-service target-service \
      --fault-mode stop --duration-down 10 --duration-up 30 \
-     >inject_fault.log 2>&1'
+     > \"$fault_injector_logfile_name_target_service\" 2>&1"
 
-    echo "Fault Injector started"
+    if [[ "$experiment_type" == "legacy" ]]; then
+      screen -dmS inject_fault_session_2 bash -c \
+        "python inject_fault.py --target-service proxy-1 \
+        --fault-mode stop --duration-down 10 --duration-up 10 \
+        > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
+    else
+      screen -dmS inject_fault_session_2 bash -c \
+        "python inject_fault.py --target-service proxy-1-1 \
+        --fault-mode stop --duration-down 10 --duration-up 10 \
+        > \"$fault_injector_logfile_name_proxy_1-1\" 2>&1"
+    fi
+    
+    echo "Fault Injectors started"
 else
-    echo "Running without Fault Injector"
+    echo "Running without Fault Injectors"
 fi
 
 # Wait for services to be ready
@@ -342,7 +376,7 @@ docker run -d \
   bash -c "$cmd_prod_workload"
 
 echo "Launching Alarm Device workload to the first ARS component"
-cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload.py -u http://host.docker.internal:8081 -m 500 -p'
+cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload.py -u http://host.docker.internal:8081,http://host.docker.internal:8082,http://host.docker.internal:8083 -m 500 -p'
 
 docker run -d \
   --name ad_workload_container \
@@ -352,7 +386,7 @@ docker run -d \
   bash -c "$cmd_ad_workload"
 
 # move to root folder
-cd ../
+cd "$root_folder"
 
 # move to python folder
 cd python
@@ -363,12 +397,13 @@ echo "docker-compose logs -f"
 echo -e "\nPress Ctrl+C to stop all services and cleanup."
 
 # move to root folder
-cd ../
+cd "$root_folder"
 
 # move to locust_scripts folder
 cd locust_scripts
 
 echo "Begin polling the locust-parameter-variation.log to check if the load test was finished ('Finished performance test.')"
+sleep 10
 
 file_path="locust_logs/ad_workload/locust-parameter-variation.log"
 
