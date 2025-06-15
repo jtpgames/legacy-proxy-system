@@ -49,10 +49,12 @@ def on_message(message: str) -> Tuple[bool, str]:
             logger.info(f"Successfully forwarded message to {TARGET_URL}")
             return True, ""
         except RequestException as e:
-            logger.error(f"Failed to forward message to HTTP endpoint: {e}")
+            error_msg = f"Failed to forward message to HTTP endpoint: {e}"
+            logger.error(error_msg)
             return False, error_msg
         except Exception as e:
-            logger.error(f"Unexpected error while processing message: {e}")
+            error_msg = f"Unexpected error while processing message: {e}"
+            logger.error(error_msg)
             return False, error_msg
 
 
