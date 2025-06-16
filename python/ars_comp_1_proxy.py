@@ -1,3 +1,4 @@
+from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Body, Depends, Query, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
@@ -39,13 +40,13 @@ TARGET_URL = os.getenv('TARGET_URL', 'http://localhost:8080/ID_REQ_KC_STORE7D3BP
 
 
 class SimpleCall(BaseModel):
-    Phone: str
-    Branch: str
-    Headnumber: str
-    TriggerTime: datetime
+    phone: str
+    branch: str
+    headnumber: str
+    triggertime: datetime
 
     def __str__(self):
-        return f"Phone: {self.Phone}, Branch: {self.Branch}, Headnumber: {self.Headnumber}"
+        return f"Phone: {self.phone}, Branch: {self.branch}, Headnumber: {self.headnumber}, TriggerTime: {self.triggertime}"
 
 
 def get_simple_call_from_query(
@@ -56,18 +57,19 @@ def get_simple_call_from_query(
 ) -> Optional[SimpleCall]:
     if all([Phone, Branch, Headnumber, TriggerTime]):
         return SimpleCall(
-            Phone=Phone, Branch=Branch, Headnumber=Headnumber, TriggerTime=TriggerTime
+            phone=Phone, branch=Branch, headnumber=Headnumber, triggertime=TriggerTime
         )
     return None
 
 
-def on_message(message: str) -> Tuple[bool, str]:
+def on_message(json_object) -> Tuple[bool, str]:
         try:
-            response = requests.post(TARGET_URL, json=message)
+            response = requests.post(TARGET_URL, json=json_object)
             response.raise_for_status()
             return True, ""
         except RequestException as e:
             error_msg = f"Failed to send message to legacy proxy: {e}"
+            logger.error(e.response.json())
             return False, error_msg
         except Exception as e:
             error_msg = f"Unexpected error while processing message: {e}"
@@ -84,10 +86,16 @@ async def receive_simple_call(
         if not data:
             return {"error": "Missing input: provide either query parameters or a JSON body."}
 
-        message_str = json.dumps(data)
-        
+        # message_str = json.dumps(jsonable_encoder(data))
+        message_str = str(data)
+      
+        json_msg = {
+            'id': data.phone,
+            'body': message_str
+        }
+
         # Publish to Legacy System
-        success, error = on_message(message_str)
+        success, error = on_message(json_msg)
         if not success:
             logger.error(f"HTTP forward failed: {error}")
             raise HTTPException(
