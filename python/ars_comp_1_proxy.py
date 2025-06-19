@@ -1,8 +1,8 @@
 from fastapi.encoders import jsonable_encoder
-from fastapi import FastAPI, Body, Depends, Query, HTTPException
+from fastapi import FastAPI, Body, Depends, Query, HTTPException, Header
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Annotated, Optional, Tuple
 import os
 import json
 import logging
@@ -62,14 +62,15 @@ def get_simple_call_from_query(
     return None
 
 
-def on_message(json_object) -> Tuple[bool, str]:
+def on_message(json_object, request_id) -> Tuple[bool, str]:
         try:
-            response = requests.post(TARGET_URL, json=json_object)
+            headers = {"Request-Id": f"{request_id}"}
+
+            response = requests.post(TARGET_URL, headers=headers, json=json_object)
             response.raise_for_status()
             return True, ""
         except RequestException as e:
             error_msg = f"Failed to send message to legacy proxy: {e}"
-            logger.error(e.response.json())
             return False, error_msg
         except Exception as e:
             error_msg = f"Unexpected error while processing message: {e}"
@@ -80,6 +81,7 @@ def on_message(json_object) -> Tuple[bool, str]:
 async def receive_simple_call(
     query_data: Optional[SimpleCall] = Depends(get_simple_call_from_query),
     body_data: Optional[SimpleCall] = Body(None),
+    request_id: Annotated[str | None, Header()] = None
 ):
     try:
         data = query_data or body_data
@@ -95,21 +97,21 @@ async def receive_simple_call(
         }
 
         # Publish to Legacy System
-        success, error = on_message(json_msg)
+        success, error = on_message(json_msg, request_id)
         if not success:
-            logger.error(f"HTTP forward failed: {error}")
+            logger.error(f"[{request_id}] HTTP send failed: {error}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to send message: {error}"
             )
 
-        logger.info(f"Successfully send message: {message_str} to {TARGET_URL}")
+        logger.info(f"[{request_id}] Successfully send message: {message_str} to {TARGET_URL}")
         return {
             "status": "success",
             "message": "Data published to Legacy System"
         }
     except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
+        logger.error(f"[{request_id}] Error processing request: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
