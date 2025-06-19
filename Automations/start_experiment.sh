@@ -33,6 +33,7 @@ usage() {
     echo "                    ng: Use docker-compose-ng.yml"
     echo "                    (default: legacy)"
     echo "  --with_fault_injector  Run Fault Injector"
+    echo "  --without_timestamp     Run experiment without timestamped folder. Uses --clean implicitly.)"
     echo "  -h, --help        Show this help message"
     exit 0
 }
@@ -73,6 +74,7 @@ cleanup() {
       echo "collect the results"
 
       echo "from legacy_proxies"
+      echo "to Automations/$target_folder_for_logs ..."
 
       # here we are still in the python folder
       mkdir -pv "$root_folder/Automations/$target_folder_for_logs/LegacyProxy_Logs"
@@ -96,7 +98,7 @@ cleanup() {
       cd "$root_folder"
 
       # Set the destination log folder based on the experiment type value
-      dst_log_folder="experiment_logs_$compose_type"
+      dst_log_folder="experiment_logs_$experiment_type"
 
       echo "from load tester"
       cd locust_scripts
@@ -178,6 +180,7 @@ run_cleanup=false
 verbose=false
 experiment_type="legacy"  # Default to legacy
 with_fault_injector=false
+include_timestamp_to_experiment_result_folder=true
 
 for arg in "$@"; do
     case "$arg" in
@@ -201,6 +204,11 @@ for arg in "$@"; do
                 echo "Error: Argument for $1 is missing" >&2
                 exit 1
             fi
+            ;;
+        --without_timestamp)
+            include_timestamp_to_experiment_result_folder=false
+            run_cleanup=true
+            shift
             ;;
         --with_fault_injector)
             with_fault_injector=true
@@ -235,6 +243,13 @@ done
 
 # Shift past processed options
 shift $((OPTIND - 1))
+
+echo "Starting experiment given the following args:"
+echo "run_cleanup=$run_cleanup"
+echo "verbose=$verbose"
+echo "experiment_type=$experiment_type"
+echo "with_fault_injector=$with_fault_injector"
+echo "include_timestamp_to_experiment_result_folder=$include_timestamp_to_experiment_result_folder"
 
 automations_folder=$(pwd)
 
@@ -276,7 +291,11 @@ else
 fi
 
 # compose the full path
-target_folder_for_logs="$target_folder_for_logs/$timestamp/$fault_injector_subdir"
+if [[ "$include_timestamp_to_experiment_result_folder" == "true" ]]; then
+  target_folder_for_logs="$target_folder_for_logs/$timestamp/$fault_injector_subdir"
+else
+  target_folder_for_logs="$target_folder_for_logs/$fault_injector_subdir"
+fi
 
 # move to python folder
 cd python
@@ -325,12 +344,12 @@ if [[ "$with_fault_injector" == "true" ]]; then
     if [[ "$experiment_type" == "legacy" ]]; then
       screen -dmS inject_fault_session_2 bash -c \
         "python inject_fault.py --target-service proxy-1 \
-        --fault-mode stop --duration-down 10 --duration-up 10 \
+        --fault-mode stop --duration-down 10 --duration-up 20 \
         > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
     else
       screen -dmS inject_fault_session_2 bash -c \
-        "python inject_fault.py --target-service proxy-1-1 \
-        --fault-mode stop --duration-down 10 --duration-up 10 \
+        "python inject_fault.py --target-service proxy1-1 \
+        --fault-mode stop --duration-down 10 --duration-up 20 \
         > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
     fi
     
@@ -376,7 +395,7 @@ docker run -d \
   bash -c "$cmd_prod_workload"
 
 echo "Launching Alarm Device workload to the first ARS component"
-cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload.py -u http://host.docker.internal:8081,http://host.docker.internal:8082,http://host.docker.internal:8083 -m 500 -p'
+cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload_2.py -u http://host.docker.internal:7081,http://host.docker.internal:7082,http://host.docker.internal:7083 -m 500 -p'
 
 docker run -d \
   --name ad_workload_container \
