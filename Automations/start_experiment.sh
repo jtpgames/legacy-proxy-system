@@ -141,10 +141,15 @@ cleanup() {
 
       cd "$root_folder/locust_scripts"
       activate_venv_in_current_dir
-      # python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/worker_log_500.1.log"
-      python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/worker_log_500.1.log" \
-        "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
-        "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service"
+      if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
+        python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust_log_1.log" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service"
+      else
+        python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/worker_log_500.1.log" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service"
+      fi
 
       exit 0
     fi
@@ -451,34 +456,49 @@ cd "$root_folder"
 # move to locust_scripts folder
 cd locust_scripts
 
-echo "Begin polling the locust-parameter-variation.log to check if the load test was finished ('Finished performance test.')"
-sleep 10
+if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
+  failover_experiment_duration_minutes=2
+  echo "Experiment runs for $failover_experiment_duration_minutes minute(s)."
 
-file_path="locust_logs/ad_workload/locust-parameter-variation.log"
+  duration_sec=$((failover_experiment_duration_minutes*60))
+  progress_step=$(awk "BEGIN {print $duration_sec / 100}")
 
-# Loop until the last line contains "Finished performance test"
-last_line=""
-while true; do
-  # Check if the file exists
-  if [[ ! -f "$file_path" ]]; then
-    echo "Warning: File '$file_path' does not exist. Retrying ..."
-  else
-    if [[ -z "$last_line" ]]; then
-      echo "File '$file_path' found. Waiting until performance test is finished ..."
-    fi
-    # Read the last line of the file
-    last_line=$(tail -n 1 "$file_path")
-  fi
-
-  # Check if the last line contains the desired text
-  if [[ "$last_line" == *"Finished performance test"* ]]; then
-    echo $last_line
-    break
-  fi
-
-  # Sleep for a short period to avoid busy-waiting
+  for i in {1..100}; do
+    printf "\rProgress: [%-50s] %d%%" $(printf '#%.0s' $(seq 1 $((i/2)))) "$i"
+    sleep "$progress_step"
+  done
+  echo # prints a new line after the progress bar
+else
+  echo "Begin polling the locust-parameter-variation.log to check if the load test was finished ('Finished performance test.')"
   sleep 10
-done
+
+  file_path="locust_logs/ad_workload/locust-parameter-variation.log"
+
+  # Loop until the last line contains "Finished performance test"
+  last_line=""
+  while true; do
+    # Check if the file exists
+    if [[ ! -f "$file_path" ]]; then
+      echo "Warning: File '$file_path' does not exist. Retrying ..."
+    else
+      if [[ -z "$last_line" ]]; then
+        echo "File '$file_path' found. Waiting until performance test is finished ..."
+      fi
+      # Read the last line of the file
+      last_line=$(tail -n 1 "$file_path")
+    fi
+
+    # Check if the last line contains the desired text
+    if [[ "$last_line" == *"Finished performance test"* ]]; then
+      echo $last_line
+      break
+    fi
+
+    # Sleep for a short period to avoid busy-waiting
+    sleep 10
+  done
+fi
+
 
 echo "Experiment completed."
 sleep 1
