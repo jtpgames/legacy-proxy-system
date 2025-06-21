@@ -39,7 +39,7 @@ run_setup() {
 # Function to run baseline experiment scripts
 run_baseline_experiment() {
   if [[ "$run_cleanup" == true ]]; then
-    ./start_experiment.sh --with_fault_injector -c -t legacy 
+    ./start_experiment.sh --with_fault_injector --without_timestamp -t legacy 
   else
     ./start_experiment.sh --with_fault_injector -t legacy 
   fi
@@ -48,7 +48,7 @@ run_baseline_experiment() {
 # Function to run experiment with broker scripts
 run_broker_experiment() {
   if [[ "$run_cleanup" == true ]]; then
-    ./start_experiment.sh --with_fault_injector -c -t ng 
+    ./start_experiment.sh --with_fault_injector --without_timestamp -t ng 
   else
     ./start_experiment.sh --with_fault_injector -t ng
   fi
