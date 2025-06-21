@@ -244,25 +244,51 @@ done
 # Shift past processed options
 shift $((OPTIND - 1))
 
+# After options, expect exactly one positional argument
+if [[ $# -ne 1 ]]; then
+  echo "Error: Exactly one positional argument is required" >&2
+  usage
+fi
+
+# read remaining positional argument
+failover_or_performance_load="$1"
+
+# -- Validate arguments --
+# --
+failover_load_type="failover"
+performance_load_type="performance"
+if [[ "$failover_or_performance_load" != "$failover_load_type" && "$failover_or_performance_load" != "$performance_load_type" ]]; then
+    echo "Error: Invalid load type '$failover_or_performance_load'. Must be '$failover_load_type' or '$performance_load_type'."
+    exit 1
+fi
+
+if [[ "$experiment_type" != "legacy" && "$experiment_type" != "ng" ]]; then
+    echo "Error: Invalid type '$experiment_type'. Must be 'legacy' or 'ng'."
+    exit 1
+fi
+# --
+
 echo "Starting experiment given the following args:"
 echo "run_cleanup=$run_cleanup"
 echo "verbose=$verbose"
 echo "experiment_type=$experiment_type"
 echo "with_fault_injector=$with_fault_injector"
 echo "include_timestamp_to_experiment_result_folder=$include_timestamp_to_experiment_result_folder"
+echo "Load Type: $failover_or_performance_load"
 
 automations_folder=$(pwd)
+
+# Check if current directory name is "Automations"
+if [[ "$(basename "$automations_folder")" != "Automations" ]]; then
+  echo "Error: Current directory is not 'Automations'. It is '"$automations_folder"'."
+  echo "Please always execute the experiment from within the Automations directory."
+  exit 1
+fi
 
 # move to root folder
 cd ../
 
 root_folder=$(pwd)
-
-# Validate experiment_type
-if [[ "$experiment_type" != "legacy" && "$experiment_type" != "ng" ]]; then
-    echo "Error: Invalid type '$experiment_type'. Must be 'legacy' or 'ng'."
-    exit 1
-fi
 
 # Select appropriate docker-compose file
 if [[ "$experiment_type" == "legacy" ]]; then
@@ -365,7 +391,7 @@ sleep 10
 echo $(screen -ls)
 
 # move to root folder
-cd ..
+cd "$root_folder"
 
 set +e
 
@@ -395,7 +421,11 @@ docker run -d \
   bash -c "$cmd_prod_workload"
 
 echo "Launching Alarm Device workload to the first ARS component"
-cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload_2.py -u http://host.docker.internal:7081,http://host.docker.internal:7082,http://host.docker.internal:7083 -m 500 -p'
+if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
+  cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload_2.py -u http://host.docker.internal:7081,http://host.docker.internal:7082,http://host.docker.internal:7083 -m 1'
+else
+  cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload_2.py -u http://host.docker.internal:7081,http://host.docker.internal:7082,http://host.docker.internal:7083 -m 500 -p'
+fi
 
 docker run -d \
   --name ad_workload_container \
