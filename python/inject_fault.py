@@ -56,6 +56,14 @@ def inject_a_fault_every_s_seconds(container, target_service, s):
     scheduler.add_job(simulate_fault, 'interval', seconds=s, args=[container, target_service])
 
 
+def inject_a_fault_once_after_s_seconds(container, target_service, s):
+    scheduler.add_job(
+            simulate_fault, 
+            'date',
+            run_date=datetime.now() + timedelta(seconds=s),
+            args=[container, target_service]
+    )
+
 def inject_three_faults_in_a_row(container, target_service):
     due_date1 = datetime.now() + timedelta(0, minutes=5)
     due_date2 = due_date1 + timedelta(0, 60)
@@ -187,7 +195,7 @@ def stress_cpu(container, target_service: str, duration_down: int):
 def main(
     target_service: str = typer.Option("target-service", help="Target container name"),
     fault_mode: str = typer.Option("stop", help="Fault mode: stop, net, cpu"),
-    duration_down: int = typer.Option(10, help="Seconds the fault is applied"),
+    duration_down: int = typer.Option(10, help="Seconds the fault is applied. Does not apply for stop mode."),
     duration_up: int = typer.Option(30, help="Seconds between faults"),
 ):
     logger.info("Starting fault injection - target_service: '%s', fault_mode: '%s', duration_down: %d, duration_up: %d", 
@@ -206,7 +214,7 @@ def main(
         try:
             if fault_mode == "stop":
                 scheduler.start()
-                inject_a_fault_every_s_seconds(container, target_service, duration_up)
+                inject_a_fault_once_after_s_seconds(container, target_service, duration_up)
                 # Block main thread indefinitely
                 try:
                     while True:
