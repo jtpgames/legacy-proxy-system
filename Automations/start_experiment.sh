@@ -144,11 +144,13 @@ cleanup() {
       if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust_log_1.log" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service"
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
+          -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
       else
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/worker_log_500.1.log" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service"
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
+          -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
       fi
 
       exit 0
@@ -369,18 +371,18 @@ if [[ "$with_fault_injector" == "true" ]]; then
 
     screen -dmS inject_fault_session_1 bash -c \
     "python inject_fault.py --target-service target-service \
-     --fault-mode stop --duration-down 10 --duration-up 30 \
+     --fault-mode stop --duration-down 10 --duration-up 60 \
      > \"$fault_injector_logfile_name_target_service\" 2>&1"
 
     if [[ "$experiment_type" == "legacy" ]]; then
       screen -dmS inject_fault_session_2 bash -c \
         "python inject_fault.py --target-service proxy-1 \
-        --fault-mode stop --duration-down 10 --duration-up 20 \
+        --fault-mode stop_once --duration-down 10 --duration-up 20 \
         > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
     else
       screen -dmS inject_fault_session_2 bash -c \
         "python inject_fault.py --target-service proxy1-1 \
-        --fault-mode stop --duration-down 10 --duration-up 20 \
+        --fault-mode stop_once --duration-down 10 --duration-up 20 \
         > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
     fi
     
@@ -391,7 +393,11 @@ fi
 
 # Wait for services to be ready
 echo "Waiting for services to start..."
-sleep 10
+if [[ "$experiment_type" == "legacy" ]]; then
+  sleep 10
+else
+  sleep 15
+fi
 
 echo $(screen -ls)
 

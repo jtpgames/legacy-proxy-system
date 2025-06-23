@@ -194,7 +194,7 @@ def stress_cpu(container, target_service: str, duration_down: int):
 @app.command()
 def main(
     target_service: str = typer.Option("target-service", help="Target container name"),
-    fault_mode: str = typer.Option("stop", help="Fault mode: stop, net, cpu"),
+    fault_mode: str = typer.Option("stop", help="Fault mode: stop, stop_once, net, cpu"),
     duration_down: int = typer.Option(10, help="Seconds the fault is applied. Does not apply for stop mode."),
     duration_up: int = typer.Option(30, help="Seconds between faults"),
 ):
@@ -212,9 +212,12 @@ def main(
             continue
 
         try:
-            if fault_mode == "stop":
+            if fault_mode == "stop" or fault_mode == "stop_once":
                 scheduler.start()
-                inject_a_fault_once_after_s_seconds(container, target_service, duration_up)
+                if fault_mode == "stop_once":
+                    inject_a_fault_once_after_s_seconds(container, target_service, duration_up)
+                else:
+                    inject_a_fault_every_s_seconds(container, target_service, duration_up)
                 # Block main thread indefinitely
                 try:
                     while True:
