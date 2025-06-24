@@ -24,7 +24,7 @@ function activate_venv_in_current_dir {
 
 # Function: Display usage instructions
 usage() {
-    echo "Usage: $0 [options]"
+    echo "Usage: $0 [options] <failover|performance> [duration for failover experiment]"
     echo "Options:"
     echo "  -c, --clean       Delete local experiment files (results, logs, ...)"
     echo "  -v, --verbose     Enable verbose mode"
@@ -251,14 +251,14 @@ done
 # Shift past processed options
 shift $((OPTIND - 1))
 
-# After options, expect exactly one positional argument
-if [[ $# -ne 1 ]]; then
-  echo "Error: Exactly one positional argument is required" >&2
+# After options, expect the positional argument for the load type
+if [[ $# -lt 1 ]]; then
+  echo "Error: At least one positional argument is required" >&2
   usage
 fi
 
-# read remaining positional argument
 failover_or_performance_load="$1"
+shift
 
 # -- Validate arguments --
 # --
@@ -267,6 +267,18 @@ performance_load_type="performance"
 if [[ "$failover_or_performance_load" != "$failover_load_type" && "$failover_or_performance_load" != "$performance_load_type" ]]; then
     echo "Error: Invalid load type '$failover_or_performance_load'. Must be '$failover_load_type' or '$performance_load_type'."
     exit 1
+fi
+
+if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
+  # Expect another positional argument for the experiment duration in minutes
+
+  if [[ $# -ne 1 ]]; then
+    echo "Error: Load Type $failover_load_type expects the duration in minutes as a second positional argument." >&2
+    usage
+  fi
+
+  failover_experiment_duration_minutes="$1"
+  shift
 fi
 
 if [[ "$experiment_type" != "legacy" && "$experiment_type" != "ng" ]]; then
@@ -463,7 +475,6 @@ cd "$root_folder"
 cd locust_scripts
 
 if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
-  failover_experiment_duration_minutes=2
   echo "Experiment runs for $failover_experiment_duration_minutes minute(s)."
 
   duration_sec=$((failover_experiment_duration_minutes*60))
