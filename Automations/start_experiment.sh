@@ -128,6 +128,9 @@ cleanup() {
       # Create the destination folder and move the log file
       mkdir -p "$dst_log_folder" && mv -v ars_simulation.log "$dst_log_folder/gs_simulation.log"
 
+      echo "Number of received alarm messages:"
+      grep -c "200 OK:.*ID_REQ_KC_STORE.*" "$dst_log_folder/gs_simulation.log"
+
       # move back to root folder
       cd "$root_folder"
 
@@ -147,7 +150,7 @@ cleanup() {
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
       else
-        python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/worker_log_500.1.log" \
+        python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
@@ -381,19 +384,19 @@ if [[ "$with_fault_injector" == "true" ]]; then
     echo "Fault Injector starting ..."
     activate_venv_in_current_dir
 
-    screen -dmS inject_fault_session_1 bash -c \
-    "python inject_fault.py --target-service target-service \
-     --fault-mode stop --duration-down 10 --duration-up 60 \
-     > \"$fault_injector_logfile_name_target_service\" 2>&1"
+    # screen -dmS inject_fault_session_1 bash -c \
+    # "python inject_fault.py --target-service target-service \
+    #  --fault-mode stop --duration-down 10 --duration-up 60 \
+    #  > \"$fault_injector_logfile_name_target_service\" 2>&1"
 
     if [[ "$experiment_type" == "legacy" ]]; then
       screen -dmS inject_fault_session_2 bash -c \
-        "python inject_fault.py --target-service proxy-1 \
+        "python inject_fault.py --target-service ars-comp-1-1 --target-service proxy-1 --target-service target-service \
         --fault-mode stop_once --duration-down 10 --duration-up 20 \
         > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
     else
       screen -dmS inject_fault_session_2 bash -c \
-        "python inject_fault.py --target-service proxy1-1 \
+        "python inject_fault.py --target-service ars-comp-1-1 --target-service proxy1-1 --target-service proxy2-1 --target-service target-service \
         --fault-mode stop_once --duration-down 10 --duration-up 20 \
         > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
     fi
