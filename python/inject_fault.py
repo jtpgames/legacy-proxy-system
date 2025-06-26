@@ -1,3 +1,4 @@
+from typing import List
 import docker
 import typer
 import signal
@@ -52,17 +53,26 @@ def is_faulted():
     return _is_faulted
 
 
-def inject_a_fault_every_s_seconds(container, target_service, s):
+def inject_a_fault_every_s_seconds(container, target_service: str, s):
     scheduler.add_job(simulate_fault, 'interval', seconds=s, args=[container, target_service])
 
 
-def inject_a_fault_once_after_s_seconds(container, target_service, s):
-    scheduler.add_job(
-            simulate_fault, 
-            'date',
-            run_date=datetime.now() + timedelta(seconds=s),
-            args=[container, target_service]
-    )
+def inject_a_fault_once_after_s_seconds(containers, target_services: List[str], s):
+    max_recovery_time = current_model.fault_detection_time_range_s[1] + current_model.operator_reaction_time_s + current_model.ars_recovery_time_s
+
+    run_date_for_next_job = datetime.now() + timedelta(seconds=s)
+    for i in range(0, len(target_services)):
+        container = containers[i]
+        target_service = target_services[i]
+
+        scheduler.add_job(
+                simulate_fault, 
+                'date',
+                run_date=run_date_for_next_job,
+                args=[container, target_service]
+        )
+        # next service should go down after this one recovered and the number of seconds 's' given by the caller.
+        run_date_for_next_job += timedelta(seconds=max_recovery_time + s)
 
 def inject_three_faults_in_a_row(container, target_service):
     due_date1 = datetime.now() + timedelta(0, minutes=5)
@@ -193,7 +203,7 @@ def stress_cpu(container, target_service: str, duration_down: int):
 
 @app.command()
 def main(
-    target_service: str = typer.Option("target-service", help="Target container name"),
+    target_service: List[str] = typer.Option(..., "--target-service", help="Target container name. For stop_once fault mode, multiple services can be specified that are used in sequence."),
     fault_mode: str = typer.Option("stop", help="Fault mode: stop, stop_once, net, cpu"),
     duration_down: int = typer.Option(10, help="Seconds the fault is applied. Does not apply for stop mode."),
     duration_up: int = typer.Option(30, help="Seconds between faults"),
@@ -205,19 +215,22 @@ def main(
     seed(42)
 
     while True:
-        container = get_container(target_service)
-        if not container:
-            logger.warning("[WARN] Target container '%s' not found. Retrying in 5 seconds...", target_service)
-            sleep(5)
-            continue
+        containers = []
+        for t in target_service:
+            container = get_container(t)
+            if not container:
+                logger.warning("[WARN] Target container '%s' not found. Retrying in 5 seconds...", target_service)
+                sleep(5)
+                continue
+            containers.append(container)
 
         try:
             if fault_mode == "stop" or fault_mode == "stop_once":
                 scheduler.start()
                 if fault_mode == "stop_once":
-                    inject_a_fault_once_after_s_seconds(container, target_service, duration_up)
+                    inject_a_fault_once_after_s_seconds(containers, target_service, duration_up)
                 else:
-                    inject_a_fault_every_s_seconds(container, target_service, duration_up)
+                    inject_a_fault_every_s_seconds(containers[0], target_service[0], duration_up)
                 # Block main thread indefinitely
                 try:
                     while True:
@@ -227,9 +240,9 @@ def main(
                     scheduler.shutdown()
                     sys.exit(0)
             elif fault_mode == "net":
-                add_netem(container, target_service, duration_down)
+                add_netem(containers[0], target_service[0], duration_down)
             elif fault_mode == "cpu":
-                stress_cpu(container, target_service, duration_down)
+                stress_cpu(containers[0], target_service[0], duration_down)
             else:
                 logger.error("[ERROR] Unknown fault mode: '%s'", fault_mode)
                 continue
