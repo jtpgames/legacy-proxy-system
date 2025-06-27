@@ -77,25 +77,26 @@ async def receive_message(message: Message, request_id: Optional[str] = Header(d
         if request_id is not None:
             message_dict["request_id"] = request_id
         message_str = json.dumps(message_dict)
-        
+       
+        logger.info(f"[{request_id}] Publishing message {message_str} to Broker ...")
         # Publish to MQTT
         success, error = publish_to_mqtt(message_str)
         
         if not success:
-            logger.error(f"MQTT publish failed: {error}")
+            logger.error(f"[{request_id}] MQTT publish failed: {error}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to publish message: {error}"
             )
 
-        logger.info(f"Successfully published message: {message_str}")
+        logger.info(f"[{request_id}] Successfully published message")
         return {
             "status": "success",
             "message": "Data published to MQTT"
         }
 
     except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
+        logger.error(f"[{request_id}] Error processing request: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"

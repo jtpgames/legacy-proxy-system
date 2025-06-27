@@ -96,7 +96,9 @@ async def receive_simple_call(
             'body': message_str
         }
 
-        # Publish to Legacy System
+        logger.info(f"[{request_id}] Sending message {message_str} to {TARGET_URL} ...")
+
+        # Send to Legacy Proxy
         success, error = on_message(json_msg, request_id)
         if not success:
             logger.error(f"[{request_id}] HTTP send failed: {error}")
@@ -105,7 +107,7 @@ async def receive_simple_call(
                 detail=f"Failed to send message: {error}"
             )
 
-        logger.info(f"[{request_id}] Successfully send message: {message_str} to {TARGET_URL}")
+        logger.info(f"[{request_id}] Successfully send message")
         return {
             "status": "success",
             "message": "Data published to Legacy System"

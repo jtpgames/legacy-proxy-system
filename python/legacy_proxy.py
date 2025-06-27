@@ -42,18 +42,18 @@ class Message(BaseModel):
     id: str
     body: str
 
-def on_message(message: str) -> Tuple[bool, str]:
+def on_message(message: str, request_id: Optional[str]) -> Tuple[bool, str]:
         try:
-            response = requests.post(TARGET_URL, json=message)
+            headers = {"Request-Id": f"{request_id}"}
+            response = requests.post(TARGET_URL, headers=headers, json=message)
             response.raise_for_status()
-            logger.info(f"Successfully forwarded message to {TARGET_URL}")
             return True, ""
         except RequestException as e:
-            error_msg = f"Failed to forward message to HTTP endpoint: {e}"
+            error_msg = f"[{request_id}] Failed to forward message to HTTP endpoint: {e}"
             logger.error(error_msg)
             return False, error_msg
         except Exception as e:
-            error_msg = f"Unexpected error while processing message: {e}"
+            error_msg = f"[{request_id}] Unexpected error while processing message: {e}"
             logger.error(error_msg)
             return False, error_msg
 
@@ -67,25 +67,26 @@ async def receive_message(message: Message, request_id: Optional[str] = Header(d
         if request_id is not None:
             message_dict["request_id"] = request_id
         message_str = json.dumps(message_dict)
-        
-        # Publish to Legacy System
-        success, error = on_message(message_str)
+       
+        logger.info(f"[{request_id}] Forwarding message {message_str} to {TARGET_URL} ...")
+        # Forward to Legacy System
+        success, error = on_message(message_str, request_id)
         
         if not success:
-            logger.error(f"HTTP forward failed: {error}")
+            logger.error(f"[{request_id}] HTTP forward failed: {error}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to forward message: {error}"
             )
 
-        logger.info(f"Successfully forwarded message: {message_str}")
+        logger.info(f"[{request_id}] Successfully forwarded message")
         return {
             "status": "success",
             "message": "Data published to Legacy System"
         }
 
     except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
+        logger.error(f"[{request_id}] Error processing request: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
