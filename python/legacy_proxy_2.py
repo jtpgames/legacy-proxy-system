@@ -54,11 +54,14 @@ class MQTTToHTTPForwarder:
         """Callback for when a message is received from the broker."""
         try:
             payload = msg.payload.decode()
-            logger.info(f"Received message on topic {msg.topic} (QoS {msg.qos}): {payload}")
-            
-            response = requests.post(TARGET_URL, json=payload)
+            json_payload = json.loads(payload)
+            request_id = json_payload["request_id"]
+            logger.info(f"[{request_id}] Received message on topic {msg.topic} (QoS {msg.qos}): {payload}")
+
+            headers = {"Request-Id": f"{request_id}"}
+            response = requests.post(TARGET_URL, headers=headers, json=payload)
             response.raise_for_status()
-            logger.info(f"Successfully forwarded message to {TARGET_URL}")
+            logger.info(f"[{request_id}] Successfully forwarded message to {TARGET_URL}")
             
         except json.JSONDecodeError as e:
             logger.error(f"Failed to decode message as JSON: {e}")
