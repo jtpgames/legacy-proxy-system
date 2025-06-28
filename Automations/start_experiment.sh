@@ -157,7 +157,6 @@ cleanup() {
           # Count matches in LoadTester_Logs/locust_log_1.log
           # the following regex captures the reuest-id enclosed in () from the capture group (\d+) and only for the first send to the first server (7081)
           # ignoring retries to the other servers.
-          # TODO: What about resends to the first? I think I need to deduplicate using "sort -u" before "| tee"
           echo "Determining distinct request-ids..."
           count_file1=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log | sort -u | tee request_ids.txt | wc -l)
 
@@ -166,6 +165,9 @@ cleanup() {
 
           echo "Request-Ids in locust_log_1.log: $count_file1"
           echo "Matches in gs_simulation.log: $count_file2"
+          if [ "$count_file1" -eq "$count_file2" ]; then
+            echo "Number of requests matches."
+          fi
 
       else
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log" \
@@ -484,6 +486,9 @@ docker run -d \
   -v /etc/localtime:/etc/localtime:ro \
   locust_scripts_runner:latest \
   bash -c "$cmd_prod_workload"
+
+echo "Waiting 2 seconds so that the prod workload warms up the JVM-based ARS component..."
+sleep 2 # for performance test make this longer to properly warm up?
 
 echo "Launching Alarm Device workload to the first ARS component"
 if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
