@@ -67,6 +67,9 @@ cleanup() {
     screen -S inject_fault_session_1 -X quit 2>/dev/null || true
     screen -S inject_fault_session_2 -X quit 2>/dev/null || true
 
+    echo "Stopping load testers and waiting for an additional 10 seconds grace period"
+    docker stop prod_workload_container ad_workload_container 2>/dev/null || true
+    sleep 10
     echo "Stopping all containers..."
     docker-compose down --remove-orphans
 
@@ -87,11 +90,10 @@ cleanup() {
       # change to target log folder for docker logs
       cd "$root_folder/Automations/$target_folder_for_logs"
 
-      echo "Stopping locust_scripts runner..."
+      echo "from locust_scripts runner"
+
       docker logs prod_workload_container > prod_workload_container.log 2>&1
       docker logs ad_workload_container > ad_workload_container.log 2>&1
-
-      docker stop prod_workload_container ad_workload_container 2>/dev/null || true
       docker rm prod_workload_container ad_workload_container 2>/dev/null || true
 
       # change back to root folder
@@ -149,12 +151,49 @@ cleanup() {
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
+
+          cd "$root_folder/Automations/$target_folder_for_logs"
+          echo "Determining if all requests that have been sent by the load tester have been successfully received and processed by the Simulator..."
+          # Count matches in LoadTester_Logs/locust_log_1.log
+          # the following regex captures the reuest-id enclosed in () from the capture group (\d+) and only for the first send to the first server (7081)
+          # ignoring retries to the other servers.
+          # TODO: What about resends to the first? I think I need to deduplicate using "sort -u" before "| tee"
+          echo "Determining distinct request-ids..."
+          count_file1=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log | sort -u | tee request_ids.txt | wc -l)
+
+          echo "Count corresponding matches in Simulator_Logs/gs_simulation.log"
+          count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | grep -Ff - Simulator_Logs/gs_simulation.log | wc -l)
+
+          echo "Request-Ids in locust_log_1.log: $count_file1"
+          echo "Matches in gs_simulation.log: $count_file2"
+
       else
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
+
+        # TODO: Validate equal numbers of sent and received requests simila to the failover test
       fi
+
+      # to trace a request to the following:
+      # 1. retrieve the request-id of the request you want to trace from the load tester logs, then
+      # for fail over test
+      # grep "request-id" LoadTester_Logs/locust_log_1.log LegacyProxy_Logs/ars-comp-1-1.log LegacyProxy_Logs/proxy-1.log Simulator_Logs/gs_simulation.log
+      # for performance test
+      # grep "request_id" LoadTester_Logs/locust_log_1.log LegacyProxy_Logs/ars-comp-1-1.log LegacyProxy_Logs/proxy1-1.log LegacyProxy_Logs/proxy2-1.log Simulator_Logs/gs_simulation.log
+      # --------------------------
+      # perl -n -e 'print "$1, CMD-ENDE\n" if /\((\d+)\)\sSending to/' LoadTester_Logs/locust_log_1.log | xargs -I {} grep {} Simulator_Logs/gs_simulation.log
+      # --------------------------
+      # # Count matches in LoadTester_Logs/locust_log_1.log
+      # count_file1=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to/' LoadTester_Logs/locust_log_1.log | tee request_ids.txt | wc -l)
+      #
+      # # Count corresponding matches in Simulator_Logs/gs_simulation.log
+      # count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | grep -Ff - Simulator_Logs/gs_simulation.log | wc -l)
+      #
+      # # Print counts
+      # echo "Matches in file1: $count_file1"
+      # echo "Matches in file2: $count_file2"
 
       exit 0
     fi
