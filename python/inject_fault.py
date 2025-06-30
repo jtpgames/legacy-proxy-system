@@ -46,7 +46,7 @@ def recover(container, target_service: str):
     global time_of_recovery
     time_of_recovery = datetime.now()
 
-    logger.info("ARS recovered @%s", time_of_recovery)
+    logger.info("*%s* recovered @%s", target_service, time_of_recovery)
 
 
 def is_faulted():
@@ -118,7 +118,8 @@ def simulate_fault(container, target_service):
     global time_of_last_fault
     time_of_last_fault = datetime.now()
 
-    logger.info("ARS faulted @%s; operator will be notified in %ss",
+    logger.info("*%s* faulted @%s; operator will be notified in %ss",
+                target_service,
                 time_of_last_fault,
                 chosen_fault_time)
 
