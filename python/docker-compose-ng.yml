@@ -8,8 +8,8 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - mosquitto-data:/mosquitto/data
-      - mosquitto-logs:/mosquitto/log
+      - mosquitto-data:/mosquitto/data # use a named volume here as we do not need direct access in our experiment for it but it still allows us to find it in the /var/lib/docker/volumes directory
+      - ./mosquitto-logs:/mosquitto/log # use a bind mount here so that we can easily copy logs to the results folder
       - /etc/localtime:/etc/localtime:ro
     networks:
       - mqtt-net
@@ -230,5 +230,4 @@ networks:
 
 volumes:
   mosquitto-data:
-  mosquitto-logs:
 
