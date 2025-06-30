@@ -82,6 +82,7 @@ cleanup() {
       # here we are still in the python folder
       mkdir -pv "$root_folder/Automations/$target_folder_for_logs/LegacyProxy_Logs"
       mv -v "logs/"* "$root_folder/Automations/$target_folder_for_logs/LegacyProxy_Logs"
+      mv -v "mosquitto-logs/"* "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
 
       for file in ${fault_injector_logfile_base_name}*.log; do
         mv -v "$file" "$root_folder/Automations/$target_folder_for_logs/"
@@ -161,7 +162,8 @@ cleanup() {
           count_file1=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log | sort -u | tee request_ids.txt | wc -l)
 
           echo "Count corresponding matches in Simulator_Logs/gs_simulation.log"
-          count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | grep -Ff - Simulator_Logs/gs_simulation.log | wc -l)
+          # count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | grep -Ff - Simulator_Logs/gs_simulation.log | wc -l)
+          count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | rg --fixed-strings --file=- Simulator_Logs/gs_simulation.log | wc -l)
 
           echo "Request-Ids in locust_log_1.log: $count_file1"
           echo "Matches in gs_simulation.log: $count_file2"
