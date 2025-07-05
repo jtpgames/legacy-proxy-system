@@ -52,6 +52,7 @@ def publish_to_mqtt(message: str) -> Tuple[bool, str]:
     """
     try:
         mqtt.single(
+            client_id=os.getenv("SERVICE_NAME", "legacy_proxy_1"),
             topic=MQTT_TOPIC,
             payload=message,
             qos=2,
