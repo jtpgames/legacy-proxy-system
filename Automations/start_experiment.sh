@@ -181,8 +181,10 @@ cleanup() {
       # here we are still in the python folder
       mkdir -pv "$root_folder/Automations/$target_folder_for_logs/LegacyProxy_Logs"
       mv -v "logs/"* "$root_folder/Automations/$target_folder_for_logs/LegacyProxy_Logs"
-      mkdir -pv "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
-      mv -v "mosquitto-logs/"* "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
+      if [ -d "mosquitto-logs" ] && [ "$(find mosquitto-logs -type f | head -n 1)" ]; then
+        mkdir -pv "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
+        mv -v mosquitto-logs/* "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
+      fi
 
       for file in ${fault_injector_logfile_base_name}*.log; do
         mv -v "$file" "$root_folder/Automations/$target_folder_for_logs/"
@@ -258,29 +260,19 @@ cleanup() {
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
 
-        # TODO: Validate equal numbers of sent and received requests similar to the failover test
+          # validate_equal_number_of_requests_send_and_received
+          # calculate_time_difference_between_sending_and_finish_processing
       fi
 
-      # to trace a request to the following:
+      # to trace a request do the following:
       # 1. retrieve the request-id of the request you want to trace from the load tester logs, then
       # for fail over test
+      # For Baseline experiment
       # grep "request-id" LoadTester_Logs/locust_log_1.log LegacyProxy_Logs/ars-comp-1-1.log LegacyProxy_Logs/proxy-1.log Simulator_Logs/gs_simulation.log
-      # for performance test
+      # for NG experiment
       # grep "request_id" LoadTester_Logs/locust_log_1.log LegacyProxy_Logs/ars-comp-1-1.log LegacyProxy_Logs/proxy1-1.log LegacyProxy_Logs/proxy2-1.log Simulator_Logs/gs_simulation.log
-      # --------------------------
-      # perl -n -e 'print "$1, CMD-ENDE\n" if /\((\d+)\)\sSending to/' LoadTester_Logs/locust_log_1.log | xargs -I {} grep {} Simulator_Logs/gs_simulation.log
-      # --------------------------
-      # # Count matches in LoadTester_Logs/locust_log_1.log
-      # count_file1=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to/' LoadTester_Logs/locust_log_1.log | tee request_ids.txt | wc -l)
-      #
-      # # Count corresponding matches in Simulator_Logs/gs_simulation.log
-      # count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | grep -Ff - Simulator_Logs/gs_simulation.log | wc -l)
-      #
-      # # Print counts
-      # echo "Matches in file1: $count_file1"
-      # echo "Matches in file2: $count_file2"
-
-      exit 0
+      # for performance test
+      # grep "request-id" LoadTester_Logs/worker_log_500.1.log LegacyProxy_Logs/ars-comp-1-1.log LegacyProxy_Logs/proxy-1.log Simulator_Logs/gs_simulation.log
     fi
 
     echo "Cleanup completed."
@@ -309,12 +301,19 @@ log() {
 
 docker ps >/dev/null 2>&1 || { echo "Docker is not installed or running. Please install/start Docker first."; exit 1; }
 
-# Initialize flags
+# -- Global variables --
+fault_injector_logfile_base_name="fault_injector"
+# set via CLI args
 run_cleanup=false
 verbose=false
 experiment_type="legacy"  # Default to legacy
 with_fault_injector=false
 include_timestamp_to_experiment_result_folder=true
+failover_or_performance_load=''
+# -- set before running an experiment
+root_folder=''
+target_folder_for_logs=''
+# --
 
 for arg in "$@"; do
     case "$arg" in
@@ -514,7 +513,6 @@ echo "Starting services with docker-compose..."
 docker-compose build
 docker-compose up -d
 
-fault_injector_logfile_base_name="fault_injector"
 fault_injector_logfile_name_target_service="${fault_injector_logfile_base_name}_target_service.log"
 fault_injector_logfile_name_proxy_1="${fault_injector_logfile_base_name}_proxy_1.log"
 
