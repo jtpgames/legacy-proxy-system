@@ -91,7 +91,7 @@ services:
       - SERVICE_NAME=proxy1-1
     volumes:
       - ./logs:/app/logs
-      - ./legacy_proxy_1.py:/app/legacy_proxy_1.py
+      - ./mqtt/legacy_proxy_1.py:/app/legacy_proxy_1.py
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
@@ -114,7 +114,7 @@ services:
       - SERVICE_NAME=proxy1-2
     volumes:
       - ./logs:/app/logs
-      - ./legacy_proxy_1.py:/app/legacy_proxy_1.py
+      - ./mqtt/legacy_proxy_1.py:/app/legacy_proxy_1.py
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
@@ -137,7 +137,7 @@ services:
       - SERVICE_NAME=proxy1-3
     volumes:
       - ./logs:/app/logs
-      - ./legacy_proxy_1.py:/app/legacy_proxy_1.py
+      - ./mqtt/legacy_proxy_1.py:/app/legacy_proxy_1.py
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
@@ -158,7 +158,7 @@ services:
       - SERVICE_NAME=proxy2-1
     volumes:
       - ./logs:/app/logs
-      - ./legacy_proxy_2.py:/app/legacy_proxy_2.py
+      - ./mqtt/legacy_proxy_2.py:/app/legacy_proxy_2.py
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
@@ -180,7 +180,7 @@ services:
       - SERVICE_NAME=proxy2-2
     volumes:
       - ./logs:/app/logs
-      - ./legacy_proxy_2.py:/app/legacy_proxy_2.py
+      - ./mqtt/legacy_proxy_2.py:/app/legacy_proxy_2.py
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
@@ -202,7 +202,7 @@ services:
       - SERVICE_NAME=proxy2-3
     volumes:
       - ./logs:/app/logs
-      - ./legacy_proxy_2.py:/app/legacy_proxy_2.py
+      - ./mqtt/legacy_proxy_2.py:/app/legacy_proxy_2.py
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
