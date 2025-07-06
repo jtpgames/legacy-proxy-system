@@ -38,6 +38,105 @@ usage() {
     exit 0
 }
 
+convert_to_epoch() {
+  local timestamp="$1"
+  local epoch
+
+  if [[ "$(uname)" == "Darwin" ]]; then
+    # macOS: use `-j -f` to parse datetime string, output seconds since epoch
+    # Example timestamp format: "2025-07-05 16:55:56.284"
+    # We ignore fractional seconds since macOS date does not support them directly
+    epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "${timestamp%%.*}" "+%s")
+  else
+    # GNU/Linux: use -d and parse full timestamp with fractional seconds truncated
+    epoch=$(date -u -d "${timestamp%%.*}" "+%s")
+  fi
+
+  echo "$epoch"
+}
+
+convert_to_epoch_ms() {
+  local ts="$1"
+  python -c "
+import sys
+from datetime import datetime
+ts = sys.argv[1]
+dt = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S.%f')
+print(int(dt.timestamp() * 1000))
+  " "$ts"
+}
+
+calculate_time_difference_between_sending_and_finish_processing() {
+  cd "$root_folder/Automations/$target_folder_for_logs"
+
+  count_file1=$(perl -n -e 'print "[$1] $2\n" if /\[([^]]+)].*\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log \
+    | sed 's/,/./' \
+    | sort -u \
+    | tee request_ids_load_tester_send.txt \
+    | wc -l)
+
+  count_file2=$(perl -n -e 'print "[$1] $2\n" if /]\s(.+)\s\[.+UID:\s([^,]+),\s*CMD-ENDE\s*ID_REQ_KC_STORE7D3BPACKET/' \
+    Simulator_Logs/gs_simulation.log \
+    | sort -u \
+    | tee request_ids_simulator_finish_processing.txt \
+    | wc -l)
+
+  while read -r line; do
+    IFS=$'\t' read -r r_ts r_id < <(echo "$line" | perl -n -e 'print "$1\t$2\n" if /\[([^]]+)]\s+(\d+)/')
+
+    # Find corresponding line
+    match=$(rg -F "$r_id" "request_ids_simulator_finish_processing.txt")
+
+    if [[ -n "$match" ]]; then
+      processed_ts=$(echo "$match" | perl -n -e 'print "$1\n" if /\[([^]]+)]/')
+
+      epoch_a=$(convert_to_epoch_ms "$r_ts")
+      epoch_b=$(convert_to_epoch_ms "$processed_ts")
+
+      # Compute time difference
+      diff=$(echo "$epoch_b - $epoch_a" | bc)
+
+      echo "ID: $r_id → Δt = ${diff}ms"
+    else
+      echo "ID: $r_id → not found" 
+    fi
+
+  done < "request_ids_load_tester_send.txt"
+}
+
+validate_equal_number_of_requests_send_and_received() {
+  cd "$root_folder/Automations/$target_folder_for_logs"
+  echo "Determining if all requests that have been sent by the load tester have been successfully received and processed by the Simulator..."
+  # Count matches in LoadTester_Logs/locust_log_1.log
+  # the following regex captures the reuest-id enclosed in () from the capture group (\d+) and only for the first send to the first server (7081)
+  # ignoring retries to the other servers.
+  echo "Determining distinct request-ids..."
+  count_file1=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log | sort -u | tee request_ids.txt | wc -l)
+
+  echo "Count corresponding matches in Simulator_Logs/gs_simulation.log"
+  # count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | grep -Ff - Simulator_Logs/gs_simulation.log | wc -l)
+  count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | rg --fixed-strings --file=- Simulator_Logs/gs_simulation.log | wc -l)
+
+  echo "Number of received alarm messages:"
+  grep -c "200 OK:.*ID_REQ_KC_STORE.*" "Simulator_Logs/gs_simulation.log"
+
+  rg -o 'UID:\s([^,]+),\s*CMD-ENDE\s*ID_REQ_KC_STORE7D3BPACKET' Simulator_Logs/gs_simulation.log \
+    | sed -E 's/UID:[[:space:]]([^,]+),[[:space:]]*CMD-ENDE[[:space:]]*ID_REQ_KC_STORE7D3BPACKET/\1/' \
+    | sort -u \
+    > request_ids_simulator.txt
+
+  echo "Request-Ids only in request_ids.txt"
+  comm -23 request_ids.txt request_ids_simulator.txt
+  echo "Request-Ids only in request_ids_simulator.txt"
+  comm -13 request_ids.txt request_ids_simulator.txt
+
+  echo "Request-Ids in locust_log_1.log: $count_file1"
+  echo "Matches in gs_simulation.log: $count_file2"
+  if [ "$count_file1" -eq "$count_file2" ]; then
+    echo "Number of requests matches."
+  fi
+}
+
 # Function to cleanup resources
 cleanup() {
     set +e
@@ -82,6 +181,7 @@ cleanup() {
       # here we are still in the python folder
       mkdir -pv "$root_folder/Automations/$target_folder_for_logs/LegacyProxy_Logs"
       mv -v "logs/"* "$root_folder/Automations/$target_folder_for_logs/LegacyProxy_Logs"
+      mkdir -pv "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
       mv -v "mosquitto-logs/"* "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
 
       for file in ${fault_injector_logfile_base_name}*.log; do
@@ -131,9 +231,6 @@ cleanup() {
       # Create the destination folder and move the log file
       mkdir -p "$dst_log_folder" && mv -v ars_simulation.log "$dst_log_folder/gs_simulation.log"
 
-      echo "Number of received alarm messages:"
-      grep -c "200 OK:.*ID_REQ_KC_STORE.*" "$dst_log_folder/gs_simulation.log"
-
       # move back to root folder
       cd "$root_folder"
 
@@ -153,31 +250,15 @@ cleanup() {
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
 
-          cd "$root_folder/Automations/$target_folder_for_logs"
-          echo "Determining if all requests that have been sent by the load tester have been successfully received and processed by the Simulator..."
-          # Count matches in LoadTester_Logs/locust_log_1.log
-          # the following regex captures the reuest-id enclosed in () from the capture group (\d+) and only for the first send to the first server (7081)
-          # ignoring retries to the other servers.
-          echo "Determining distinct request-ids..."
-          count_file1=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log | sort -u | tee request_ids.txt | wc -l)
-
-          echo "Count corresponding matches in Simulator_Logs/gs_simulation.log"
-          # count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | grep -Ff - Simulator_Logs/gs_simulation.log | wc -l)
-          count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | rg --fixed-strings --file=- Simulator_Logs/gs_simulation.log | wc -l)
-
-          echo "Request-Ids in locust_log_1.log: $count_file1"
-          echo "Matches in gs_simulation.log: $count_file2"
-          if [ "$count_file1" -eq "$count_file2" ]; then
-            echo "Number of requests matches."
-          fi
-
+          validate_equal_number_of_requests_send_and_received
+          calculate_time_difference_between_sending_and_finish_processing
       else
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
 
-        # TODO: Validate equal numbers of sent and received requests simila to the failover test
+        # TODO: Validate equal numbers of sent and received requests similar to the failover test
       fi
 
       # to trace a request to the following:
@@ -390,6 +471,22 @@ fi
 
 # move to python folder
 cd python
+
+# set timezone environment variables in docker-compose file
+local_timezone=$(readlink /etc/localtime | sed 's|/var/db/timezone/zoneinfo/||')
+
+echo "Local Timezone: ${local_timezone}"
+
+# Replace and update the file safely
+echo "Setting TZ environment variable on ${compose_file}"
+tmpfile=$(mktemp)
+echo "Created temp file ${tmpfile}"
+echo "Replace"
+grep -E '^[[:space:]]*-\s*TZ=' "$compose_file"
+echo "with"
+grep -E '^[[:space:]]*-\s*TZ=' "$compose_file" | sed -E "s|^([[:space:]]*)-[[:space:]]*TZ=.*|\1- TZ=${local_timezone}|"
+
+sed -E "s|^([[:space:]]*)-[[:space:]]*TZ=.*|\1- TZ=${local_timezone}|" "$compose_file" > "$tmpfile" && mv "$tmpfile" "$compose_file"
 
 # Create a symbolic link to the selected compose file
 if [[ -f "docker-compose.yml" ]]; then
