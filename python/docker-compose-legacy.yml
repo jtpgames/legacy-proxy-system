@@ -135,6 +135,8 @@ services:
       - ../Simulators:/app
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
+    environment:
+      - TZ=Europe/Berlin
     command: java -jar build/libs/Rast-Simulator-all.jar -m 0 -c 0
     networks:
       - classic-net
