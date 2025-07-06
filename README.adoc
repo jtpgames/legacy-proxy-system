@@ -31,6 +31,15 @@ brew install bash
 echo 'alias bash="/opt/homebrew/bin/bash"' >> ~/.zshrc
 ----
 
+==== Additional tools
+
+[source,bash]
+----
+# Install ripgrep as a fast grep alternative
+brew install ripgrep
+
+----
+
 == Usage
 
 [Instructions on how to run the experiments would go here]
