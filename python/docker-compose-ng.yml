@@ -3,7 +3,7 @@ version: "2.1"
 services:
   mosquitto:
     build:
-      context: .
+      context: ./mqtt_broker
       dockerfile: Dockerfile
     ports:
       - "1883:1883"
