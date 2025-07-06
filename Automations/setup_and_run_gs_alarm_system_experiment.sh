@@ -54,7 +54,7 @@ run_baseline_experiment_performance() {
 
 run_broker_experiment_failover() {
   if [[ "$run_cleanup" == true ]]; then
-    ./start_experiment.sh --with_fault_injector --without_timestamp -t ng failover 3
+    ./start_experiment.sh --with_fault_injector --without_timestamp -t ng failover 4
   else
     ./start_experiment.sh --with_fault_injector -t ng failover
   fi
