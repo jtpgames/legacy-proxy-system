@@ -107,11 +107,28 @@ calculate_time_difference_between_sending_and_finish_processing() {
 validate_equal_number_of_requests_send_and_received() {
   cd "$root_folder/Automations/$target_folder_for_logs"
   echo "Determining if all requests that have been sent by the load tester have been successfully received and processed by the Simulator..."
-  # Count matches in LoadTester_Logs/locust_log_1.log
+  # Count matches in LoadTester_Logs (for failover experiment locust_log_1.log, for performance experiment every file matching the pattern worker_*.log)
   # the following regex captures the reuest-id enclosed in () from the capture group (\d+) and only for the first send to the first server (7081)
   # ignoring retries to the other servers.
   echo "Determining distinct request-ids..."
-  count_file1=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log | sort -u | tee request_ids.txt | wc -l)
+
+  if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
+    count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log | sort -u | tee request_ids.txt | wc -l)
+  else
+    # Save current nullglob state
+    nullglob_was_set=$(shopt -p nullglob)
+
+    # Enable nullglob state (If worker_*.log matches no files, the pattern expands to nothing ('') instead of remaining a literal string.)
+    shopt -s nullglob
+
+    files=(LoadTester_Logs/worker_*.log)
+    if (( ${#files[@]} > 0 )); then
+      count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' "${files[@]}" | sort -u | tee request_ids.txt | wc -l)
+    fi
+
+    # Restore original nullglob state
+    eval "$nullglob_was_set"
+  fi
 
   echo "Count corresponding matches in Simulator_Logs/gs_simulation.log"
   # count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | grep -Ff - Simulator_Logs/gs_simulation.log | wc -l)
@@ -130,9 +147,9 @@ validate_equal_number_of_requests_send_and_received() {
   echo "Request-Ids only in request_ids_simulator.txt"
   comm -13 request_ids.txt request_ids_simulator.txt
 
-  echo "Request-Ids in locust_log_1.log: $count_file1"
+  echo "Request-Ids in locust_log_1.log: $count_request_ids_load_tester"
   echo "Matches in gs_simulation.log: $count_file2"
-  if [ "$count_file1" -eq "$count_file2" ]; then
+  if [ "$count_request_ids_load_tester" -eq "$count_file2" ]; then
     echo "Number of requests matches."
   fi
 }
@@ -260,7 +277,7 @@ cleanup() {
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
 
-          # validate_equal_number_of_requests_send_and_received
+          validate_equal_number_of_requests_send_and_received
           # calculate_time_difference_between_sending_and_finish_processing
       fi
 
@@ -303,6 +320,8 @@ docker ps >/dev/null 2>&1 || { echo "Docker is not installed or running. Please 
 
 # -- Global variables --
 fault_injector_logfile_base_name="fault_injector"
+failover_load_type="failover"
+performance_load_type="performance"
 # set via CLI args
 run_cleanup=false
 verbose=false
@@ -388,8 +407,6 @@ shift
 
 # -- Validate arguments --
 # --
-failover_load_type="failover"
-performance_load_type="performance"
 if [[ "$failover_or_performance_load" != "$failover_load_type" && "$failover_or_performance_load" != "$performance_load_type" ]]; then
     echo "Error: Invalid load type '$failover_or_performance_load'. Must be '$failover_load_type' or '$performance_load_type'."
     exit 1
