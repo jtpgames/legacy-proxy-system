@@ -2,7 +2,7 @@ version: "2.1"
 
 services:
   ars-comp-1-1:
-    image: python:3.10-slim
+    image: python:3.12-slim
     command: /bin/bash -c "pip install -r requirements.txt && python ars_comp_1_proxy.py"
     ports:
       - "7081:8080"
@@ -23,7 +23,7 @@ services:
       - classic-net 
   
   ars-comp-1-2:
-    image: python:3.10-slim
+    image: python:3.12-slim
     command: /bin/bash -c "pip install -r requirements.txt && python ars_comp_1_proxy.py"
     ports:
       - "7082:8080"
@@ -44,7 +44,7 @@ services:
       - classic-net 
   
   ars-comp-1-3:
-    image: python:3.10-slim
+    image: python:3.12-slim
     command: /bin/bash -c "pip install -r requirements.txt && python ars_comp_1_proxy.py"
     ports:
       - "7083:8080"
@@ -65,7 +65,7 @@ services:
       - classic-net 
   
   proxy-1:
-    image: python:3.10-slim
+    image: python:3.12-slim
     command: /bin/bash -c "pip install -r requirements.txt && python legacy_proxy.py"
     ports:
       - "8081:8080"
@@ -86,7 +86,7 @@ services:
       - classic-net 
 
   proxy-2:
-    image: python:3.10-slim
+    image: python:3.12-slim
     command: /bin/bash -c "pip install -r requirements.txt && python legacy_proxy.py"
     ports:
       - "8082:8080"
@@ -107,7 +107,7 @@ services:
       - classic-net 
 
   proxy-3:
-    image: python:3.10-slim
+    image: python:3.12-slim
     command: /bin/bash -c "pip install -r requirements.txt && python legacy_proxy.py"
     ports:
       - "8083:8080"
