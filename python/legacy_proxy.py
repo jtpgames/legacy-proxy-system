@@ -71,23 +71,23 @@ class Message(BaseModel):
     body: str
 
 async def on_message(json_object, request_id) -> Tuple[bool, str]:
-        try:
-            headers = {"Request-Id": f"{request_id}"}
-            response = await httpclient.post(TARGET_URL, headers=headers, json=json_object)
-            response.raise_for_status()
-            return True, ""
-        except HTTPStatusError as e:
-            error_msg = f"[{request_id}] HTTP error {e.response.status_code}: {e.response.text}"
-            logger.error(error_msg)
-            return False, error_msg
-        except RequestError as e:
-            error_msg = f"[{request_id}] Failed to forward message to HTTP endpoint: {e}"
-            logger.error(error_msg)
-            return False, error_msg
-        except Exception as e:
-            error_msg = f"[{request_id}] Unexpected error while processing message: {e}"
-            logger.error(error_msg)
-            return False, error_msg
+    try:
+        headers = {"Request-Id": f"{request_id}"}
+        response = await httpclient.post(TARGET_URL, headers=headers, json=json_object)
+        response.raise_for_status()
+        return True, ""
+    except HTTPStatusError as e:
+        error_msg = f"[{request_id}] HTTP error {e.response.status_code}: {e.response.text}"
+        logger.error(error_msg)
+        return False, error_msg
+    except RequestError as e:
+        error_msg = f"[{request_id}] Failed to forward message to HTTP endpoint: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+    except Exception as e:
+        error_msg = f"[{request_id}] Unexpected error while processing message: {e}"
+        logger.error(error_msg)
+        return False, error_msg
 
 
 @app.post("/ID_REQ_KC_STORE7D3BPACKET")
