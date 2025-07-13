@@ -154,6 +154,44 @@ validate_equal_number_of_requests_send_and_received() {
   fi
 }
 
+determine_maximum_parallel_requests_received_at_targetservice() {
+  cd "$root_folder/Automations/$target_folder_for_logs"
+
+  # Search for lines like X: {PR 1=2, PR 3=0, Request Type=9.0}
+ 
+  perl -ne '
+  if (/\{PR 1=(\d+),.*Request Type=([\d.]+).*}/) {
+    $pr1 = $1;
+    $req = $2;
+    $max{$req} = $pr1 if !defined($max{$req}) || $pr1 > $max{$req};
+  }
+  END {
+    foreach $req (sort { $a <=> $b } keys %max) {
+      printf "Request Type %s: max PR 1 = %d\n", $req, $max{$req};
+    }
+  }
+' Simulator_Logs/gs_simulation.log
+
+
+  # Not compatible with BSD awk
+#   awk '
+#   /\{PR 1=[0-9]+,.*Request Type=[0-9.]+/ {
+#     match($0, /\{PR 1=([0-9]+),.*Request Type=([0-9.]+)/, m)
+#     pr1 = m[1] + 0
+#     req = m[2]
+#     if (pr1 > max[req]) {
+#       max[req] = pr1
+#     }
+#   }
+#   END {
+#     for (r in max) {
+#       print r, max[r]
+#     }
+#   }
+# ' Simulator_Logs/gs_simulation.log | sort -n | awk '{ printf "Request Type %s: max PR 1 = %s\n", $1, $2 }'
+
+}
+
 # Function to cleanup resources
 cleanup() {
     set +e
@@ -279,6 +317,7 @@ cleanup() {
 
           validate_equal_number_of_requests_send_and_received
           # calculate_time_difference_between_sending_and_finish_processing
+          determine_maximum_parallel_requests_received_at_targetservice
       fi
 
       # to trace a request do the following:
@@ -564,9 +603,9 @@ fi
 # Wait for services to be ready
 echo "Waiting for services to start..."
 if [[ "$experiment_type" == "legacy" ]]; then
-  sleep 10
-else
   sleep 15
+else
+  sleep 20
 fi
 
 echo $(screen -ls)
