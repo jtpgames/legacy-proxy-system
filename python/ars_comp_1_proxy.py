@@ -1,7 +1,10 @@
 from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Body, Depends, Query, HTTPException, Header
+from fastapi.responses import JSONResponse
+from fastapi.requests import Request
 from pydantic import BaseModel
 from datetime import datetime
+import time
 from typing import Annotated, Optional, Tuple
 from contextlib import asynccontextmanager
 import os
@@ -11,6 +14,7 @@ from logging.handlers import RotatingFileHandler
 import httpx
 from httpx import AsyncClient, HTTPStatusError, RequestError
 import uvicorn
+from uvicorn.protocols.http.h11_impl import H11Protocol
 
 # Configure logging
 if not os.path.exists('logs'):
@@ -67,6 +71,20 @@ app = FastAPI(
 )
 
 
+class LoggingH11Protocol(H11Protocol):
+    def connection_made(self, transport):
+        peername = transport.get_extra_info("peername")
+        logger.debug(f"TCP connection from {peername}")
+        super().connection_made(transport)
+
+    def connection_lost(self, exc):
+        if exc:
+            logger.debug(f"TCP connection lost with error: {exc}")
+        else:
+            logger.debug("TCP connection closed gracefully")
+        super().connection_lost(exc)
+
+
 class SimpleCall(BaseModel):
     phone: str
     branch: str
@@ -91,21 +109,40 @@ def get_simple_call_from_query(
 
 
 async def on_message(json_object, request_id) -> Tuple[bool, str]:
-        try:
-            headers = {"Request-Id": f"{request_id}"}
+    try:
+        headers = {"Request-Id": f"{request_id}"}
 
-            response = await httpclient.post(TARGET_URL, headers=headers, json=json_object)
-            response.raise_for_status()
-            return True, ""
-        except HTTPStatusError as e:
-            error_msg = f"[{request_id}] HTTP error {e.response.status_code}: {e.response.text}"
-            return False, error_msg
-        except RequestError as e:
-            error_msg = f"[{request_id}] Failed to send message to legacy proxy: {e}"
-            return False, error_msg
-        except Exception as e:
-            error_msg = f"[{request_id}] Unexpected error while processing message: {e}"
-            return False, error_msg
+        response = await httpclient.post(TARGET_URL, headers=headers, json=json_object)
+        response.raise_for_status()
+        return True, ""
+    except HTTPStatusError as e:
+        error_msg = f"[{request_id}] HTTP error {e.response.status_code}: {e.response.text}"
+        return False, error_msg
+    except RequestError as e:
+        error_msg = f"[{request_id}] Failed to send message to legacy proxy: {e}"
+        return False, error_msg
+    except Exception as e:
+        error_msg = f"[{request_id}] Unexpected error while processing message: {e}"
+        return False, error_msg
+
+
+# @app.exception_handler(Exception)
+# async def global_exception_handler(request: Request, exc: Exception):
+#     logger.error("Unhandled exception: %s", exc, exc_info=True)
+#     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+#
+#
+# @app.middleware("http")
+# async def log_requests(request: Request, call_next):
+#     start_time = time.time()
+#     try:
+#         response = await call_next(request)
+#     except Exception as e:
+#         logger.exception("Unhandled exception in request")
+#         raise  # Let global exception handler handle it
+#     duration = time.time() - start_time
+#     logger.info(f"{request.method} {request.url.path} -> {response.status_code} in {duration:.3f}s")
+#     return response
 
 
 @app.post("/api/v1/simple")
@@ -157,5 +194,5 @@ if __name__ == '__main__':
     logger.info(f"Starting server on {host}:{port}")
     logger.info(f"Sending to: {TARGET_URL}")
     
-    uvicorn.run(app, host=host, port=port, log_config=None)
+    uvicorn.run(app, host=host, port=port, log_config=None, http=LoggingH11Protocol)
 
