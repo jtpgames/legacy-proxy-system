@@ -6,8 +6,9 @@ from logging.handlers import RotatingFileHandler
 import os
 import json
 from typing import Dict, Any, Tuple, Optional
-import requests
-from requests.exceptions import RequestException
+import httpx
+from httpx import AsyncClient, HTTPStatusError, RequestError
+from contextlib import asynccontextmanager
 import uvicorn
 
 # Configure logging
@@ -32,8 +33,35 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 uvicorn_logger.addHandler(handler)
 
-# Initialize FastAPI app
-app = FastAPI(title="Legacy Proxy", description="HTTP to Legacy system service")
+# Initialize async HTTP client
+httpclient:AsyncClient = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global httpclient
+    # Startup: Create a single persistent HTTP client for better performance
+    httpclient = httpx.AsyncClient(
+        http2=True,
+        timeout=httpx.Timeout(60.0),  # 60 second timeout
+        limits=httpx.Limits(
+            max_keepalive_connections=100,
+            max_connections=None, # No limit
+            keepalive_expiry=30.0
+        )
+    )
+    logger.info("HTTP client initialized")
+    yield
+    # Shutdown: Close the HTTP client
+    if httpclient:
+        await httpclient.aclose()
+        logger.info("HTTP client closed")
+
+# Initialize FastAPI app with lifespan
+app = FastAPI(
+    title="Legacy Proxy", 
+    description="HTTP to Legacy system service",
+    lifespan=lifespan
+)
 
 TARGET_URL = os.getenv('TARGET_URL', 'http://localhost:8080/ID_REQ_KC_STORE7D3BPACKET')
 
@@ -42,13 +70,17 @@ class Message(BaseModel):
     id: str
     body: str
 
-def on_message(message: str, request_id: Optional[str]) -> Tuple[bool, str]:
+async def on_message(json_object, request_id) -> Tuple[bool, str]:
         try:
             headers = {"Request-Id": f"{request_id}"}
-            response = requests.post(TARGET_URL, headers=headers, json=message)
+            response = await httpclient.post(TARGET_URL, headers=headers, json=json_object)
             response.raise_for_status()
             return True, ""
-        except RequestException as e:
+        except HTTPStatusError as e:
+            error_msg = f"[{request_id}] HTTP error {e.response.status_code}: {e.response.text}"
+            logger.error(error_msg)
+            return False, error_msg
+        except RequestError as e:
             error_msg = f"[{request_id}] Failed to forward message to HTTP endpoint: {e}"
             logger.error(error_msg)
             return False, error_msg
@@ -70,7 +102,7 @@ async def receive_message(message: Message, request_id: Optional[str] = Header(d
        
         logger.info(f"[{request_id}] Forwarding message {message_str} to {TARGET_URL} ...")
         # Forward to Legacy System
-        success, error = on_message(message_str, request_id)
+        success, error = await on_message(message_str, request_id)
         
         if not success:
             logger.error(f"[{request_id}] HTTP forward failed: {error}")
