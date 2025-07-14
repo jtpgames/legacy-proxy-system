@@ -113,6 +113,8 @@ async def on_message(json_object, request_id) -> Tuple[bool, str]:
         headers = {"Request-Id": f"{request_id}"}
 
         response = await httpclient.post(TARGET_URL, headers=headers, json=json_object)
+        logger.debug("[%i] Response: %s", request_id, response.status_code)
+        logger.debug("[%i] HTTP version: %s", request_id, response.http_version)
         response.raise_for_status()
         return True, ""
     except HTTPStatusError as e:
@@ -194,5 +196,10 @@ if __name__ == '__main__':
     logger.info(f"Starting server on {host}:{port}")
     logger.info(f"Sending to: {TARGET_URL}")
     
-    uvicorn.run(app, host=host, port=port, log_config=None, http=LoggingH11Protocol)
+    uvicorn.run(app, 
+                host=host, 
+                port=port, 
+                log_config=None, 
+                # http=LoggingH11Protocol, 
+                timeout_keep_alive=60)
 
