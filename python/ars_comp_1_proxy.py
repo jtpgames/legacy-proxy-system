@@ -113,8 +113,8 @@ async def on_message(json_object, request_id) -> Tuple[bool, str]:
         headers = {"Request-Id": f"{request_id}"}
 
         response = await httpclient.post(TARGET_URL, headers=headers, json=json_object)
-        logger.debug("[%i] Response: %s", request_id, response.status_code)
-        logger.debug("[%i] HTTP version: %s", request_id, response.http_version)
+        logger.debug(f"[{request_id}] Response: %s", response.status_code)
+        logger.debug(f"[{request_id}] HTTP version: %s", response.http_version)
         response.raise_for_status()
         return True, ""
     except HTTPStatusError as e:
