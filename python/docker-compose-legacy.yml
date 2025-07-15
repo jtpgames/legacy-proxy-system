@@ -1,9 +1,11 @@
-version: "2.1"
+version: "2.4"
 
 services:
   ars-comp-1-1:
     image: python:3.12-slim
-    command: /bin/bash -c "pip install -r requirements.txt && python ars_comp_1_proxy.py"
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_1_proxy.py"
+    cap_add:
+      - NET_ADMIN
     ports:
       - "7081:8080"
     environment:
@@ -14,17 +16,21 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./ars_comp_1_proxy.py:/app/ars_comp_1_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
-      - proxy-1
+      proxy-1:
+        condition: service_healthy
     networks:
       - classic-net 
   
   ars-comp-1-2:
     image: python:3.12-slim
-    command: /bin/bash -c "pip install -r requirements.txt && python ars_comp_1_proxy.py"
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_1_proxy.py"
+    cap_add:
+      - NET_ADMIN
     ports:
       - "7082:8080"
     environment:
@@ -35,17 +41,21 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./ars_comp_1_proxy.py:/app/ars_comp_1_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
-      - proxy-2
+      proxy-2:
+        condition: service_healthy
     networks:
       - classic-net 
   
   ars-comp-1-3:
     image: python:3.12-slim
-    command: /bin/bash -c "pip install -r requirements.txt && python ars_comp_1_proxy.py"
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_1_proxy.py"
+    cap_add:
+      - NET_ADMIN
     ports:
       - "7083:8080"
     environment:
@@ -56,17 +66,21 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./ars_comp_1_proxy.py:/app/ars_comp_1_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
-      - proxy-3
+      proxy-3:
+        condition: service_healthy
     networks:
       - classic-net 
   
   proxy-1:
     image: python:3.12-slim
-    command: /bin/bash -c "pip install -r requirements.txt && python legacy_proxy.py"
+    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy.py"
+    cap_add:
+      - NET_ADMIN
     ports:
       - "8081:8080"
     environment:
@@ -77,6 +91,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./legacy_proxy.py:/app/legacy_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
@@ -84,10 +99,15 @@ services:
       - target-service
     networks:
       - classic-net 
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
 
   proxy-2:
     image: python:3.12-slim
-    command: /bin/bash -c "pip install -r requirements.txt && python legacy_proxy.py"
+    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy.py"
+    cap_add:
+      - NET_ADMIN
     ports:
       - "8082:8080"
     environment:
@@ -98,6 +118,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./legacy_proxy.py:/app/legacy_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
@@ -105,10 +126,15 @@ services:
       - target-service
     networks:
       - classic-net 
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
 
   proxy-3:
     image: python:3.12-slim
-    command: /bin/bash -c "pip install -r requirements.txt && python legacy_proxy.py"
+    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy.py"
+    cap_add:
+      - NET_ADMIN
     ports:
       - "8083:8080"
     environment:
@@ -119,6 +145,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./legacy_proxy.py:/app/legacy_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
@@ -126,6 +153,9 @@ services:
       - target-service
     networks:
       - classic-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
 
   target-service:
     image: openjdk:17-slim
