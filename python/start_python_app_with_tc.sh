@@ -11,7 +11,7 @@ if [ ! -f "$1" ]; then
   exit 1
 fi
 
-apt-get update && apt-get install -y iproute2
+apt-get update && apt-get install -y iproute2 netcat-openbsd 
 tc -V
 
 # Increase max open files (necessary for performance experiment that creates a lot of sockets)
