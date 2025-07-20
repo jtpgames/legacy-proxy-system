@@ -1,4 +1,4 @@
-#!bash
+#!/usr/bin/env bash
 
 echo "SHELL env variable: $SHELL"
 echo "Current shell executing this script: $(ps -p $$ -o comm=)"
