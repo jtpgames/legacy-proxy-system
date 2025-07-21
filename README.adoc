@@ -13,12 +13,26 @@ TODO
 
 === System Requirements
 
-* MacOS 10.15 or higher
+To enhance the reliability of our experimental results and ensure they robustly support our claims, we conducted the experiments across various hardware and software configurations. The specific configurations utilized by the authors include:
+
+==== Configuration 1
+
+* MacOS 10.15
 * Homebrew package manager
+
+==== Configuration 2
+Virtual machine running with
+
+* CPU: 16 vCPUs
+* RAM: 32GB
+* OS: Ubuntu 24.04 LTS 64-bit (newer OS versions are untested)
+
+on the following hardware:
+* CPU: 2x Intel® Xeon® Processor E5-2690 @ 2,90 GHz × 8
 
 === Dependencies
 
-==== Bash Installation
+==== Bash Installation (MacOS)
 
 The scripts require Bash 5.0 or higher. Install it via Homebrew:
 
@@ -31,6 +45,10 @@ brew install bash
 echo 'alias bash="/opt/homebrew/bin/bash"' >> ~/.zshrc
 ----
 
+==== Bash Installation (Ubuntu)
+
+The scripts require Bash 5.0 or higher. Ubuntu 24.04 comes with this version preinstalled.
+
 ==== Additional tools
 
 [source,bash]
@@ -40,9 +58,39 @@ brew install ripgrep
 
 ----
 
+[source,bash]
+----
+# -- From docker documentation --
+# Add Docker's official GPG key:
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+--
+
+sudo apt-get install -y software-properties-common build-essential bc ripgrep git docker-compose docker-ce python3.12-venv python3.12-dev
+
+sudo groupadd docker
+sudo usermod -aG docker $USER
+----
+
 == Usage
 
-[Instructions on how to run the experiments would go here]
+== Cloning
+If you want to work on the current version of the project, clone the repository and pull all git submodules with the following command. If you want to reproduce experiments presented at conferences or journals, navigate to the respective conference/journal in Section <<_reproduction_instructions_for_conferencesjournals>> and download the zenodo repository.
+
+[source]
+----
+git clone https://github.com/jtpgames/legacy-proxy-pattern.git && cd legacy-proxy-pattern && ./pull_all_submodules.sh
+----
 
 == License
 
