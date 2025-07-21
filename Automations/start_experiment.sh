@@ -252,7 +252,7 @@ cleanup() {
     # At this point, the current working directory is /python
 
     echo "Stopping Fault injectors and terminating screen session..."
-    pgrep -f 'python inject_fault.py' | xargs kill -TERM
+    pgrep -f 'python inject_fault.py' | xargs -r kill -TERM
     sleep 1
     screen -S inject_fault_session_1 -X quit 2>/dev/null || true
     screen -S inject_fault_session_2 -X quit 2>/dev/null || true
