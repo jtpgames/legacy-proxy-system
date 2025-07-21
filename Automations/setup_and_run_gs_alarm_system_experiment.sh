@@ -13,8 +13,8 @@ show_help() {
 # Function to clean directories
 clean_start() {
   echo "Cleaning directories..."
-  rm -rv Baseline_Experiment/*
-  rm -rv NG_Experiment/*
+  rm -rfv Baseline_Experiment/*
+  rm -rfv NG_Experiment/*
 }
 
 # Initialize flags
