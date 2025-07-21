@@ -35,6 +35,7 @@ execute_docker_compose() {
   if command -v podman &>/dev/null; then
     echo "Podman is installed. Using docker-compose." >&2
     docker-compose "$@"
+    return 0
   fi
 
   # Get Docker version
@@ -671,8 +672,15 @@ rm -fv locust_logs/ad_workload/*
 cmd_prod_workload='python executor.py locust/gen_gs_prod_workload.py -u http://host.docker.internal:8084'
 echo "Launching Production Workload directly on the last ARS component"
 
+# Detect if running on Linux with Docker engine (not Podman)
+ADD_HOST_FLAG=""
+if [[ "$(uname -s)" == "Linux" ]] && ! docker info --format '{{.OperatingSystem}}' 2>/dev/null | grep -qi podman; then
+  ADD_HOST_FLAG="--add-host=host.docker.internal:host-gateway"
+fi
+
 docker run -d \
   --name prod_workload_container \
+  $ADD_HOST_FLAG \
   -v "$LOCUST_SCRIPTS_DIR/locust_logs/prod_workload:/logs" \
   -v /etc/localtime:/etc/localtime:ro \
   locust_scripts_runner:latest \
@@ -690,6 +698,7 @@ fi
 
 docker run -d \
   --name ad_workload_container \
+  $ADD_HOST_FLAG \
   -v "$LOCUST_SCRIPTS_DIR/locust_logs/ad_workload:/logs" \
   -v /etc/localtime:/etc/localtime:ro \
   locust_scripts_runner:latest \
