@@ -76,7 +76,7 @@ echo \
 sudo apt-get update
 --
 
-sudo apt-get install -y software-properties-common build-essential bc ripgrep git docker-compose docker-ce python3.12-venv python3.12-dev
+sudo apt-get install -y software-properties-common build-essential bc ripgrep git docker-compose docker-ce screen python3.12-venv python3.12-dev
 
 sudo groupadd docker
 sudo usermod -aG docker $USER
