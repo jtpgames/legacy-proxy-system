@@ -22,6 +22,41 @@ function activate_venv_in_current_dir {
   fi
 }
 
+# Function to compare version numbers
+version_lt() {
+  [ "$1" = "$2" ] && return 1
+  # Compare two version strings using sort -V (version sort) 
+  # which sorts the two version numbers in ascending order meaning head -n1 returns the smallest of the two numbers.
+  # So when the first number passed to the function is equal to head -n1 is means the first number is less than the second number.
+  [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+}
+
+execute_docker_compose() {
+  if command -v podman &>/dev/null; then
+    echo "Podman is installed. Using docker-compose." >&2
+    docker-compose "$@"
+  fi
+
+  # Get Docker version
+  DOCKER_VERSION=$(docker version --format '{{.Server.Version}}' 2>/dev/null)
+
+  if [[ -z "$DOCKER_VERSION" ]]; then
+    echo "Error: Docker not running or not installed." >&2
+    return 1
+  fi
+
+  # Check if Docker version is less than 27.0.0
+  if version_lt "$DOCKER_VERSION" "27.0.0"; then
+    # Use docker-compose for versions below 27.0.0
+    echo "Docker version $DOCKER_VERSION detected. Using docker-compose." >&2
+    docker-compose "$@"
+  else
+    # Use docker compose for versions 27.0.0 and above
+    echo "Docker version $DOCKER_VERSION detected. Using docker compose." >&2
+    docker compose "$@"
+  fi
+}
+
 # Function: Display usage instructions
 usage() {
     echo "Usage: $0 [options] <failover|performance> [duration for failover experiment]"
@@ -225,7 +260,7 @@ cleanup() {
     docker stop prod_workload_container ad_workload_container 2>/dev/null || true
     sleep 10
     echo "Stopping all containers..."
-    docker-compose down --remove-orphans
+    execute_docker_compose down --remove-orphans
 
     if [[ "${1}" != "no_exit" ]]; then
       echo "collect the results"
@@ -337,11 +372,14 @@ cleanup() {
 
 # Function to check if services are running
 check_services_running() {
-    if docker-compose ps --quiet | grep -q .; then
-        echo "Services are already running."
-        return 0
-    fi
-    return 1
+  output=$(execute_docker_compose ps --quiet)
+
+  if grep -q . <<< "$output"; then
+    echo "Services are already running."
+    return 0
+  fi
+
+  return 1
 }
 
 cleanup_logs() {
@@ -566,8 +604,8 @@ fi
 trap cleanup SIGINT SIGTERM
 
 echo "Starting services with docker-compose..."
-docker-compose build
-docker-compose up -d
+execute_docker_compose build
+execute_docker_compose up -d
 
 fault_injector_logfile_name_target_service="${fault_injector_logfile_base_name}_target_service.log"
 fault_injector_logfile_name_proxy_1="${fault_injector_logfile_base_name}_proxy_1.log"
@@ -663,7 +701,7 @@ cd "$root_folder"
 # move to python folder
 cd python
 echo -e "\nServices are running in docker containers."
-docker-compose ps
+execute_docker_compose ps
 echo -e "\nTo view logs:"
 echo "docker-compose logs -f"
 echo -e "\nPress Ctrl+C to stop all services and cleanup."
