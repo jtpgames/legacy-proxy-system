@@ -338,6 +338,11 @@ cleanup() {
       cd "$root_folder/locust_scripts"
       activate_venv_in_current_dir
       if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
+        echo "python loadtest_plotter.py \"$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust_log_1.log\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service\" \
+          -o \"$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf\""
+        
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust_log_1.log" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
@@ -346,6 +351,11 @@ cleanup() {
           validate_equal_number_of_requests_send_and_received
           calculate_time_difference_between_sending_and_finish_processing
       else
+        echo "python loadtest_plotter.py \"$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service\" \
+          -o \"$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf\""
+        
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
           "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
@@ -381,6 +391,31 @@ check_services_running() {
   fi
 
   return 1
+}
+
+wait_until_all_files_exist() {
+  local log_dir=$1
+  shift
+  local expected_files=("$@")
+
+  echo "Waiting for all log files to be created in $log_dir..."
+
+  while true; do
+    all_exist=true
+    for file in "${expected_files[@]}"; do
+      if [[ ! -f "$log_dir/$file" ]]; then
+        all_exist=false
+        break
+      fi
+    done
+
+    if $all_exist; then
+      echo "All expected log files are present: ${expected_files[@]}"
+      break
+    fi
+
+    sleep 1
+  done
 }
 
 cleanup_logs() {
@@ -641,11 +676,26 @@ fi
 
 # Wait for services to be ready
 echo "Waiting for services to start..."
-if [[ "$experiment_type" == "legacy" ]]; then
-  sleep 15
-else
-  sleep 20
-fi
+# if [[ "$experiment_type" == "legacy" ]]; then
+#   sleep 15
+# else
+#   sleep 20
+# fi
+
+# Verify that all ars-comp-1 and proxy instances have each created a log file. That way we know that all necessary services are running and ready.
+log_dir="./logs"
+
+# Define the list of expected log files
+expected_files=(
+  "ars-comp-1-1.log"
+  "ars-comp-1-2.log"
+  "ars-comp-1-3.log"
+  "proxy-1.log"
+  "proxy-2.log"
+  "proxy-3.log"
+)
+
+wait_until_all_files_exist "$log_dir" "${expected_files[@]}"
 
 echo $(screen -ls)
 
