@@ -682,7 +682,7 @@ echo "Waiting for services to start..."
 #   sleep 20
 # fi
 
-# Verify that all ars-comp-1 and proxy instances have each created a log file. That way we know that all necessary services are running and ready.
+# Verify that all ars-comp-1 instances have each created a log file. That way we know that all necessary services are running and ready.
 log_dir="./logs"
 
 # Define the list of expected log files
@@ -690,9 +690,6 @@ expected_files=(
   "ars-comp-1-1.log"
   "ars-comp-1-2.log"
   "ars-comp-1-3.log"
-  "proxy-1.log"
-  "proxy-2.log"
-  "proxy-3.log"
 )
 
 wait_until_all_files_exist "$log_dir" "${expected_files[@]}"
