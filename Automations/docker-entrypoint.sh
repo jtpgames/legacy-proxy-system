@@ -38,6 +38,14 @@ echo "PATH: $PATH"
 echo "Contents of /app:"
 ls -la
 
+echo "Contents of /logs:"
+ls /logs -la
+
+echo "Contents of locust_logs/ad_workload and locust_logs/prod_workload:"
+ls locust_logs/ad_workload -la
+ls locust_logs/prod_workload -la
+rm -rfv locust_logs/* 
+
 # Activate the virtual environment
 activate_venv_in_current_dir
 
