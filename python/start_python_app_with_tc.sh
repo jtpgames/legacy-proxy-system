@@ -67,8 +67,14 @@ tc filter add dev eth0 parent ffff: protocol ip prio 50 u32 match ip src 0.0.0.0
 echo "Apply TBF for uplink/egress shaping (limited upload/outgoing rate) with rate ${upload_bandwidth}mbit burst ${upload_burst}k latency ${latency_ms}ms"
 tc qdisc add dev eth0 root handle 1: tbf rate "${upload_bandwidth}mbit" burst "${upload_burst}k" latency "${latency_ms}ms"
 
-# echo "Add netem to simulate latency and jitter with delay $egress_delay $egress_jitter distribution normal"
-# tc qdisc add dev eth0 parent 1:1 handle 10: netem delay $egress_delay $egress_jitter distribution normal
+# netem only works on linux host (not VM on MacOS)
+if [[ "$HOST_OS" == "linux" ]]; then
+  echo "Linux host detected."
+  echo "Add netem to simulate latency and jitter with delay $egress_delay $egress_jitter distribution normal"
+  tc qdisc add dev eth0 parent 1:1 handle 10: netem delay $egress_delay $egress_jitter distribution normal
+else
+  echo "Non-Linux host detected."
+fi
 
 # Try to use tc to simulate these links that we simulated in other experiments using mininet.
 # # Simulate production system

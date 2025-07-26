@@ -24,6 +24,7 @@ services:
       - HTTP_HOST=0.0.0.0
       - SERVICE_NAME=ars-comp-1-1
       - TARGET_URL=http://proxy1-1:8080/ID_REQ_KC_STORE7D3BPACKET
+      - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
       - ./ars_comp_1_proxy.py:/app/ars_comp_1_proxy.py
@@ -45,6 +46,7 @@ services:
       - HTTP_HOST=0.0.0.0
       - SERVICE_NAME=ars-comp-1-2
       - TARGET_URL=http://proxy1-2:8080/ID_REQ_KC_STORE7D3BPACKET
+      - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
       - ./ars_comp_1_proxy.py:/app/ars_comp_1_proxy.py
@@ -66,6 +68,7 @@ services:
       - HTTP_HOST=0.0.0.0
       - SERVICE_NAME=ars-comp-1-3
       - TARGET_URL=http://proxy1-3:8080/ID_REQ_KC_STORE7D3BPACKET
+      - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
       - ./ars_comp_1_proxy.py:/app/ars_comp_1_proxy.py
@@ -89,6 +92,7 @@ services:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
       - SERVICE_NAME=proxy1-1
+      - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
       - ./mqtt/legacy_proxy_1.py:/app/legacy_proxy_1.py
@@ -112,6 +116,7 @@ services:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
       - SERVICE_NAME=proxy1-2
+      - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
       - ./mqtt/legacy_proxy_1.py:/app/legacy_proxy_1.py
@@ -135,6 +140,7 @@ services:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
       - SERVICE_NAME=proxy1-3
+      - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
       - ./mqtt/legacy_proxy_1.py:/app/legacy_proxy_1.py
@@ -156,6 +162,7 @@ services:
       - MQTT_QOS=2
       - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
       - SERVICE_NAME=proxy2-1
+      - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
       - ./mqtt/legacy_proxy_2.py:/app/legacy_proxy_2.py
@@ -178,6 +185,7 @@ services:
       - MQTT_QOS=2
       - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
       - SERVICE_NAME=proxy2-2
+      - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
       - ./mqtt/legacy_proxy_2.py:/app/legacy_proxy_2.py
@@ -200,6 +208,7 @@ services:
       - MQTT_QOS=2
       - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
       - SERVICE_NAME=proxy2-3
+      - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
       - ./mqtt/legacy_proxy_2.py:/app/legacy_proxy_2.py

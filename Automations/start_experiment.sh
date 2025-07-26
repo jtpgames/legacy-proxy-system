@@ -32,6 +32,15 @@ version_lt() {
 }
 
 execute_docker_compose() {
+  # Determine host OS and export it
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    export HOST_OS=linux
+  elif [[ "$(uname -s)" == "Darwin" ]]; then
+    export HOST_OS=mac
+  else
+    export HOST_OS=other
+  fi
+
   if command -v podman &>/dev/null; then
     echo "Podman is installed. Using docker-compose." >&2
     docker-compose "$@"
