@@ -111,14 +111,68 @@ print(int(dt.timestamp() * 1000))
   " "$ts"
 }
 
+# Extract timestamp from a log line
+extract_ts() {
+  local line="$1"
+  local ts=$(echo "$line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}[,\.][0-9]{3}' | head -n1)
+  echo "$ts"
+}
+
+# Extract a unix timestamp from a string with the following format: <TIMESTAMP>|<rest of the string>
+extract_epoch() {
+  local input="$1"
+
+  # Extract the part before the first pipe
+  local epoch=$(echo "$input" | cut -d'|' -f1)
+
+  # Validate: must be a number
+  if [[ "$epoch" =~ ^[0-9]+$ ]]; then
+    echo "$epoch"
+  else
+    echo "Error: Invalid epoch timestamp: $epoch" >&2
+    return 1
+  fi
+}
+
+extract_file_name() {
+  local input="$1"
+
+  # Extract the part after the first pipe and before the second pipe
+  local file=$(echo "$input" | cut -d'|' -f2)
+
+  echo "$file"
+}
+
 calculate_time_difference_between_sending_and_finish_processing() {
+  echo "-- calculate_time_difference_between_sending_and_finish_processing --"
+
   cd "$root_folder/Automations/$target_folder_for_logs"
 
-  count_file1=$(perl -n -e 'print "[$1] $2\n" if /\[([^]]+)].*\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log \
-    | sed 's/,/./' \
-    | sort -u \
-    | tee request_ids_load_tester_send.txt \
-    | wc -l)
+  if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
+    count_request_ids_load_tester=$(perl -n -e 'print "[$1] $2\n" if /\[([^]]+)].*\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log \
+      | sed 's/,/./' \
+      | sort -u \
+      | tee request_ids_load_tester_send.txt \
+      | wc -l)
+  else
+    # Save current nullglob state
+    nullglob_was_set=$(shopt -p nullglob)
+
+    # Enable nullglob state (If worker_*.log matches no files, the pattern expands to nothing ('') instead of remaining a literal string.)
+    shopt -s nullglob
+
+    files=(LoadTester_Logs/worker_*.log)
+    if (( ${#files[@]} > 0 )); then
+      count_request_ids_load_tester=$(perl -n -e 'print "[$1] $2\n" if /\[([^]]+)].*\((\d+)\)\sSending to.*7081/' "${files[@]}" \
+        | sed 's/,/./' \
+        | sort -u \
+        | tee request_ids_load_tester_send.txt \
+        | wc -l)
+    fi
+
+    # Restore original nullglob state
+    eval "$nullglob_was_set"
+  fi
 
   count_file2=$(perl -n -e 'print "[$1] $2\n" if /]\s(.+)\s\[.+UID:\s([^,]+),\s*CMD-ENDE\s*ID_REQ_KC_STORE7D3BPACKET/' \
     Simulator_Logs/gs_simulation.log \
@@ -128,6 +182,14 @@ calculate_time_difference_between_sending_and_finish_processing() {
 
   while read -r line; do
     IFS=$'\t' read -r r_ts r_id < <(echo "$line" | perl -n -e 'print "$1\t$2\n" if /\[([^]]+)]\s+(\d+)/')
+
+    log_files=(
+      $(find LoadTester_Logs -type f \( -name "locust_log_*.log" -o -name "worker*.log" \))
+      $(find LegacyProxy_Logs Simulator_Logs -type f -name "*.log")
+    )
+    # echo "log_files: ${log_files[@]}"
+
+    calculate_network_latencies_between_services_for_request_id "$r_id" "${log_files[@]}"
 
     # Find corresponding line
     match=$(rg -F "$r_id" "request_ids_simulator_finish_processing.txt")
@@ -141,7 +203,7 @@ calculate_time_difference_between_sending_and_finish_processing() {
       # Compute time difference
       diff=$(echo "$epoch_b - $epoch_a" | bc)
 
-      echo "ID: $r_id → Δt = ${diff}ms"
+      echo "ID: $r_id LoadTester → Simulator Δt = ${diff}ms"
     else
       echo "ID: $r_id → not found" 
     fi
@@ -149,11 +211,65 @@ calculate_time_difference_between_sending_and_finish_processing() {
   done < "request_ids_load_tester_send.txt"
 }
 
+calculate_network_latencies_between_services_for_request_id() {
+  echo "-- calculate_network_latencies_between_services_for_request_id --"  
+
+  local log_id="$1"
+  shift
+  local files=("$@")
+
+  local matches=()
+
+  for file in "${files[@]}"; do
+    if [[ -f "$file" ]]; then
+      local line
+      line=$(grep "$log_id" "$file" | head -n1)
+      if [[ -n "$line" ]]; then
+        # echo "$line"
+
+        # extract timestamp from line and normalize decimal separator to dot notation.
+        local ts=$(extract_ts "$line" | sed 's/,/./')
+
+        # echo "$ts"
+        local epoch=$(convert_to_epoch_ms "$ts")
+        matches+=("$epoch|$file|$line")
+      fi
+    fi
+  done
+
+  # Sort matches by timestamp (first field)
+  IFS=$'\n' sorted=($(printf "%s\n" "${matches[@]}" | sort -n))
+
+  local prev_ts=""
+  local prev_file=""
+  for match in "${sorted[@]}"; do
+    # echo "ID: $log_id"
+    # echo "$match"
+
+    # Extract timestamp
+    local epoch_ts=$(extract_epoch "$match")
+    local filename=$(extract_file_name "$match")
+
+    if [[ -n "$epoch_ts" ]]; then
+      if [[ -n "$prev_ts" ]]; then
+        diff=$((epoch_ts - prev_ts))
+        echo "ID: $log_id $filename:$epoch_ts - $prev_file:$prev_ts Δt = ${diff}ms"
+      fi
+      prev_ts="$epoch_ts"
+      prev_file="$filename"
+    else
+      echo "Warning: No timestamp found in: $match"
+    fi
+  done
+}
+
 validate_equal_number_of_requests_send_and_received() {
+  echo "-- validate_equal_number_of_requests_send_and_received --"  
+
   cd "$root_folder/Automations/$target_folder_for_logs"
   echo "Determining if all requests that have been sent by the load tester have been successfully received and processed by the Simulator..."
   # Count matches in LoadTester_Logs (for failover experiment locust_log_1.log, for performance experiment every file matching the pattern worker_*.log)
-  # the following regex captures the reuest-id enclosed in () from the capture group (\d+) and only for the first send to the first server (7081)
+  # the following regex captures the request-id enclosed in () from the capture group (\d+) and only for the first send to the first server (7081)
   # ignoring retries to the other servers.
   echo "Determining distinct request-ids..."
 
@@ -200,6 +316,8 @@ validate_equal_number_of_requests_send_and_received() {
 }
 
 determine_maximum_parallel_requests_received_at_targetservice() {
+  echo "-- determine_maximum_parallel_requests_received_at_targetservice --"  
+  
   cd "$root_folder/Automations/$target_folder_for_logs"
 
   # Search for lines like X: {PR 1=2, PR 3=0, Request Type=9.0}
