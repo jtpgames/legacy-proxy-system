@@ -201,7 +201,7 @@ calculate_time_difference_between_sending_and_finish_processing() {
     $(find LegacyProxy_Logs -type f -name "proxy*.log")
     $(find Simulator_Logs -type f -name "*.log")
   )
-  # echo "log_files: ${log_files[@]}"
+  echo "log_files: ${log_files[@]}"
  
   # if [[ "$(uname)" == "Darwin" ]]; then
     # export MallocGuardEdges=1
@@ -234,7 +234,9 @@ calculate_time_difference_between_sending_and_finish_processing() {
 
     IFS=$'\t' read -r r_ts r_id < <(echo "$line" | perl -n -e 'print "$1\t$2\n" if /\[([^]]+)]\s+(\d+)/')
 
-    calculate_network_latencies_between_services_for_request_id "$r_id" "${log_files[@]}"
+    if [[ "$with_fault_injector" == "false" ]]; then
+      calculate_network_latencies_between_services_for_request_id "$r_id" "${log_files[@]}"
+    fi
 
     # Find corresponding line
     match=$(rg -F "$r_id" "request_ids_simulator_finish_processing.txt")
@@ -265,7 +267,11 @@ calculate_time_difference_between_sending_and_finish_processing() {
 
   echo ""
   echo "Average time differences between service file transitions:"
-  # for group in $(printf "%s\n" "${!deltas_by_group_sum[@]}" | sort); do
+
+  # CSV output file
+  csv_file="latency_report.csv"
+  echo "group,samples,average_ms" > "$csv_file"  # CSV header
+
   for group in "${!deltas_by_group_sum[@]}"; do
     local sum=${deltas_by_group_sum[$group]}
     local count=${deltas_by_group_count[$group]}
@@ -274,6 +280,7 @@ calculate_time_difference_between_sending_and_finish_processing() {
     else
       avg=$((sum / count))
       echo "$group: avg = ${avg}ms over $count samples"
+      echo "\"$group\",$count,$avg" >> "$csv_file"  # Write to CSV
     fi
   done
 }
