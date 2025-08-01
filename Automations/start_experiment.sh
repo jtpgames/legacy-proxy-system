@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 set -o pipefail
@@ -111,11 +111,22 @@ print(int(dt.timestamp() * 1000))
   " "$ts"
 }
 
+convert_to_epoch_ms_2() {
+  python - "$@" <<'EOF'
+import sys
+from datetime import datetime
+
+for ts in sys.argv[1:]:
+    dt = datetime.strptime(ts, '%Y-%m-%d %H:%M:%S.%f')
+    print(int(dt.timestamp() * 1000))
+EOF
+}
+
+
 # Extract timestamp from a log line
 extract_ts() {
   local line="$1"
-  local ts=$(echo "$line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}[,\.][0-9]{3}' | head -n1)
-  echo "$ts"
+  [[ $line =~ ([0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]][0-9]{2}:[0-9]{2}:[0-9]{2}[,.][0-9]{3}) ]] && echo "${BASH_REMATCH[1]}"
 }
 
 # Extract a unix timestamp from a string with the following format: <TIMESTAMP>|<rest of the string>
@@ -123,7 +134,8 @@ extract_epoch() {
   local input="$1"
 
   # Extract the part before the first pipe
-  local epoch=$(echo "$input" | cut -d'|' -f1)
+  # local epoch=$(echo "$input" | cut -d'|' -f1)
+  local epoch="${input%%|*}"  # Get everything before first '|'
 
   # Validate: must be a number
   if [[ "$epoch" =~ ^[0-9]+$ ]]; then
@@ -138,7 +150,10 @@ extract_file_name() {
   local input="$1"
 
   # Extract the part after the first pipe and before the second pipe
-  local file=$(echo "$input" | cut -d'|' -f2)
+  # local file=$(echo "$input" | cut -d'|' -f2)
+
+  local rest="${input#*|}"     # Remove up to first '|'
+  local file="${rest%%|*}"     # Keep up to next '|'
 
   echo "$file"
 }
@@ -180,14 +195,44 @@ calculate_time_difference_between_sending_and_finish_processing() {
     | tee request_ids_simulator_finish_processing.txt \
     | wc -l)
 
-  while read -r line; do
-    IFS=$'\t' read -r r_ts r_id < <(echo "$line" | perl -n -e 'print "$1\t$2\n" if /\[([^]]+)]\s+(\d+)/')
+  log_files=(
+    $(find LoadTester_Logs -type f \( -name "locust_log_*.log" -o -name "worker*.log" \))
+    $(find LegacyProxy_Logs -type f -name "ars-comp*.log")
+    $(find LegacyProxy_Logs -type f -name "proxy*.log")
+    $(find Simulator_Logs -type f -name "*.log")
+  )
+  # echo "log_files: ${log_files[@]}"
+ 
+  # if [[ "$(uname)" == "Darwin" ]]; then
+    # export MallocGuardEdges=1
+    # export MallocScribble=1
+    # export MallocStackLogging=1
+    # export MallocCheckHeapStart=0
+    # export MallocCheckHeapEach=1000
+  # fi
 
-    log_files=(
-      $(find LoadTester_Logs -type f \( -name "locust_log_*.log" -o -name "worker*.log" \))
-      $(find LegacyProxy_Logs Simulator_Logs -type f -name "*.log")
-    )
-    # echo "log_files: ${log_files[@]}"
+  declare -g -A deltas_by_group_sum
+  declare -g -A deltas_by_group_count
+
+  # count_request_ids_load_tester = 100%
+  # 1                             = 100/count_request_ids_load_tester
+  # current_iteration             = current_iteration*100/count_request_ids_load_tester => current_progress in %
+  #
+  # 50 hashes                     = 100%
+  # 50/100                        = 1%
+  # current_progress*50/100       = count_of_hashes
+
+  local current_iteration=0
+  while read -r line; do
+    # Update progress bar
+    local current_progress=$(echo "$current_iteration*100/$count_request_ids_load_tester" | bc)
+    local count_of_hashes=$(echo "$current_progress*50/100" | bc)
+
+    local bar=$(printf '#%.0s' $(seq 1 $count_of_hashes))
+    printf "\rProgress: [%-50s] %3d%%" "$bar" "$current_progress"
+    ((current_iteration++))
+
+    IFS=$'\t' read -r r_ts r_id < <(echo "$line" | perl -n -e 'print "$1\t$2\n" if /\[([^]]+)]\s+(\d+)/')
 
     calculate_network_latencies_between_services_for_request_id "$r_id" "${log_files[@]}"
 
@@ -197,22 +242,44 @@ calculate_time_difference_between_sending_and_finish_processing() {
     if [[ -n "$match" ]]; then
       processed_ts=$(echo "$match" | perl -n -e 'print "$1\n" if /\[([^]]+)]/')
 
-      epoch_a=$(convert_to_epoch_ms "$r_ts")
-      epoch_b=$(convert_to_epoch_ms "$processed_ts")
+      mapfile -t epochs < <(convert_to_epoch_ms_2 "$r_ts" "$processed_ts")
+      epoch_a="${epochs[0]}"
+      epoch_b="${epochs[1]}"
 
       # Compute time difference
       diff=$(echo "$epoch_b - $epoch_a" | bc)
 
-      echo "ID: $r_id LoadTester → Simulator Δt = ${diff}ms"
+      local group="20. LoadTester → Simulator"
+      ((deltas_by_group_sum["$group"] += diff))
+      ((deltas_by_group_count["$group"]++))
+
+      # printf "ID: $r_id LoadTester → Simulator Δt = ${diff}ms\n"
     else
       echo "ID: $r_id → not found" 
     fi
-
+    sleep 0.001
   done < "request_ids_load_tester_send.txt"
+
+  # Finalize progress bar
+  printf "\rProgress: [%-50s] 100%%\n" "$(printf '#%.0s' $(seq 1 50))"
+
+  echo ""
+  echo "Average time differences between service file transitions:"
+  # for group in $(printf "%s\n" "${!deltas_by_group_sum[@]}" | sort); do
+  for group in "${!deltas_by_group_sum[@]}"; do
+    local sum=${deltas_by_group_sum[$group]}
+    local count=${deltas_by_group_count[$group]}
+    if (( count == 0 )); then
+      echo "Error: Cannot compute average for group '$group' — count is zero."
+    else
+      avg=$((sum / count))
+      echo "$group: avg = ${avg}ms over $count samples"
+    fi
+  done
 }
 
 calculate_network_latencies_between_services_for_request_id() {
-  echo "-- calculate_network_latencies_between_services_for_request_id --"  
+  # echo "-- calculate_network_latencies_between_services_for_request_id --"
 
   local log_id="$1"
   shift
@@ -220,47 +287,77 @@ calculate_network_latencies_between_services_for_request_id() {
 
   local matches=()
 
+  mapfile -t rg_results < <(rg "$log_id" "${files[@]}")
+
+  matches_raw=()
   for file in "${files[@]}"; do
-    if [[ -f "$file" ]]; then
-      local line
-      line=$(grep "$log_id" "$file" | head -n1)
-      if [[ -n "$line" ]]; then
-        # echo "$line"
-
-        # extract timestamp from line and normalize decimal separator to dot notation.
-        local ts=$(extract_ts "$line" | sed 's/,/./')
-
-        # echo "$ts"
-        local epoch=$(convert_to_epoch_ms "$ts")
-        matches+=("$epoch|$file|$line")
-      fi
-    fi
+    for match in "${rg_results[@]}"; do
+      [[ $match == "$file:"* ]] && { matches_raw+=("$match"); break; }
+    done
   done
 
-  # Sort matches by timestamp (first field)
-  IFS=$'\n' sorted=($(printf "%s\n" "${matches[@]}" | sort -n))
+  # echo "${matches_raw[@]}"
 
+  local count=1
   local prev_ts=""
   local prev_file=""
-  for match in "${sorted[@]}"; do
-    # echo "ID: $log_id"
-    # echo "$match"
+  for match in "${matches_raw[@]}"; do
+    # Extract filename and matched line from rg output (format: filename:line)
+    local filename=${match%%:*}
+    local line=${match#*:}
 
-    # Extract timestamp
-    local epoch_ts=$(extract_epoch "$match")
-    local filename=$(extract_file_name "$match")
+    # Extract timestamp from line and normalize decimal separator to dot notation.
+    local ts=$(extract_ts "$line")
+    ts=${ts//,/.}
+
+    # Convert timestamp to epoch ms
+    local epoch_ts=$(convert_to_epoch_ms "$ts")
+
+    matches+=("$epoch_ts|$filename|$line")
 
     if [[ -n "$epoch_ts" ]]; then
       if [[ -n "$prev_ts" ]]; then
-        diff=$((epoch_ts - prev_ts))
-        echo "ID: $log_id $filename:$epoch_ts - $prev_file:$prev_ts Δt = ${diff}ms"
+        local diff=$((epoch_ts - prev_ts))
+        local group="${count}. ${prev_file} -> ${filename}"
+        ((count++))
+
+        ((deltas_by_group_sum["$group"] += diff))
+        ((deltas_by_group_count["$group"]++))
+
+        # printf "ID: $log_id $group $epoch_ts - $prev_ts Δt = ${diff}ms\n"
       fi
       prev_ts="$epoch_ts"
       prev_file="$filename"
     else
       echo "Warning: No timestamp found in: $match"
     fi
+
   done
+
+  # for match in "${matches[@]}"; do
+  #   # printf "Match: %s\n" "$match"
+  #
+  #   # Extract timestamp
+  #   local epoch_ts=$(extract_epoch "$match")
+  #   local filename=$(extract_file_name "$match")
+  #
+  #   if [[ -n "$epoch_ts" ]]; then
+  #     if [[ -n "$prev_ts" ]]; then
+  #       local diff=$((epoch_ts - prev_ts))
+  #       local group="${count}. ${prev_file} -> ${filename}"
+  #       ((count++))
+  #
+  #       ((deltas_by_group_sum["$group"] += diff))
+  #       ((deltas_by_group_count["$group"]++))
+  #
+  #       # printf "ID: $log_id $group $epoch_ts - $prev_ts Δt = ${diff}ms\n"
+  #     fi
+  #     prev_ts="$epoch_ts"
+  #     prev_file="$filename"
+  #   else
+  #     echo "Warning: No timestamp found in: $match"
+  #   fi
+  # done
 }
 
 validate_equal_number_of_requests_send_and_received() {
@@ -359,6 +456,9 @@ determine_maximum_parallel_requests_received_at_targetservice() {
 cleanup() {
     set +e
     echo -e "\nCleaning up..."
+
+    # prevent calling cleanup again when inside here.
+    trap - SIGINT SIGTERM
 
     # Check if docker-compose.yml exists, otherwise change directory
     if [[ ! -f "docker-compose.yml" ]]; then
@@ -489,7 +589,7 @@ cleanup() {
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
 
           validate_equal_number_of_requests_send_and_received
-          # calculate_time_difference_between_sending_and_finish_processing
+          calculate_time_difference_between_sending_and_finish_processing
           determine_maximum_parallel_requests_received_at_targetservice
       fi
 
