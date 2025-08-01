@@ -38,9 +38,17 @@ run_setup() {
 
 run_baseline_experiment_failover() {
   if [[ "$run_cleanup" == true ]]; then
+    ./start_experiment.sh --without_timestamp -t legacy failover 3
+  else
+    ./start_experiment.sh -t legacy failover 3
+  fi
+}
+
+run_baseline_experiment_failover_with_fault_injector() {
+  if [[ "$run_cleanup" == true ]]; then
     ./start_experiment.sh --with_fault_injector --without_timestamp -t legacy failover 3
   else
-    ./start_experiment.sh --with_fault_injector -t legacy failover
+    ./start_experiment.sh --with_fault_injector -t legacy failover 3
   fi
 }
 
@@ -53,6 +61,14 @@ run_baseline_experiment_performance() {
 }
 
 run_broker_experiment_failover() {
+  if [[ "$run_cleanup" == true ]]; then
+    ./start_experiment.sh --without_timestamp -t ng failover 4
+  else
+    ./start_experiment.sh -t ng failover 4
+  fi
+}
+
+run_broker_experiment_failover_with_fault_injector() {
   if [[ "$run_cleanup" == true ]]; then
     ./start_experiment.sh --with_fault_injector --without_timestamp -t ng failover 4
   else
@@ -71,9 +87,11 @@ run_broker_experiment_performance() {
 # List of functions to be executed
 functions=(
   "run_setup"
-  # "run_baseline_experiment_failover"
-  "run_baseline_experiment_performance"
-  # "run_broker_experiment_failover"
+  "run_baseline_experiment_failover"
+  "run_baseline_experiment_failover_with_fault_injector"
+  # "run_baseline_experiment_performance"
+  "run_broker_experiment_failover"
+  "run_broker_experiment_failover_with_fault_injector"
   # "run_broker_experiment_performance"
 )
 
