@@ -198,9 +198,17 @@ calculate_time_difference_between_sending_and_finish_processing() {
   log_files=(
     $(find LoadTester_Logs -type f \( -name "locust_log_*.log" -o -name "worker*.log" \))
     $(find LegacyProxy_Logs -type f -name "ars-comp*.log")
-    $(find LegacyProxy_Logs -type f -name "proxy*.log")
-    $(find Simulator_Logs -type f -name "*.log")
   )
+
+  if [[ "$experiment_type" == "legacy" ]]; then
+    log_files+=($(find LegacyProxy_Logs -type f -name "proxy*.log"))
+  else
+    log_files+=($(find LegacyProxy_Logs -type f -name "proxy1-*.log"))
+    log_files+=($(find LegacyProxy_Logs -type f -name "proxy2-*.log"))
+  fi
+
+  log_files+=($(find Simulator_Logs -type f -name "*.log"))
+
   echo "log_files: ${log_files[@]}"
  
   # if [[ "$(uname)" == "Darwin" ]]; then
