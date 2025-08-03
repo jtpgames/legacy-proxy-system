@@ -44,6 +44,8 @@ run_baseline_experiment_failover() {
   fi
 }
 
+# Failover baseline experiments with fault injector need to run at least 3 minutes so that the fault injector has the opportunity to inject faults into all services and let services recover.
+
 run_baseline_experiment_failover_with_fault_injector() {
   if [[ "$run_cleanup" == true ]]; then
     ./start_experiment.sh --with_fault_injector --without_timestamp -t legacy failover 3
@@ -62,17 +64,19 @@ run_baseline_experiment_performance() {
 
 run_broker_experiment_failover() {
   if [[ "$run_cleanup" == true ]]; then
-    ./start_experiment.sh --without_timestamp -t ng failover 4
+    ./start_experiment.sh --without_timestamp -t ng failover 3
   else
-    ./start_experiment.sh -t ng failover 4
+    ./start_experiment.sh -t ng failover 3
   fi
 }
+
+# Failover NG experiments with fault injector need to run at least 4 minutes so that the fault injector has the opportunity to inject faults into all services and let services recover.
 
 run_broker_experiment_failover_with_fault_injector() {
   if [[ "$run_cleanup" == true ]]; then
     ./start_experiment.sh --with_fault_injector --without_timestamp -t ng failover 4
   else
-    ./start_experiment.sh --with_fault_injector -t ng failover
+    ./start_experiment.sh --with_fault_injector -t ng failover 4
   fi
 }
 
@@ -89,10 +93,10 @@ functions=(
   "run_setup"
   "run_baseline_experiment_failover"
   "run_baseline_experiment_failover_with_fault_injector"
-  # "run_baseline_experiment_performance"
+  "run_baseline_experiment_performance"
   "run_broker_experiment_failover"
   "run_broker_experiment_failover_with_fault_injector"
-  # "run_broker_experiment_performance"
+  "run_broker_experiment_performance"
 )
 
 source run_experiment.sh
