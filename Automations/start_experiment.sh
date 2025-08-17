@@ -161,6 +161,11 @@ extract_file_name() {
 calculate_time_difference_between_sending_and_finish_processing() {
   echo "-- calculate_time_difference_between_sending_and_finish_processing --"
 
+  if [[ "$skip_calculating_time_difference_between_services" == "true" ]]; then
+    echo "Skipped"
+    return
+  fi
+
   cd "$root_folder/Automations/$target_folder_for_logs"
 
   if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
@@ -674,6 +679,7 @@ log() {
 docker ps >/dev/null 2>&1 || { echo "Docker is not installed or running. Please install/start Docker first."; exit 1; }
 
 # -- Global variables --
+skip_calculating_time_difference_between_services=true
 fault_injector_logfile_base_name="fault_injector"
 failover_load_type="failover"
 performance_load_type="performance"
