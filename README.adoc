@@ -85,7 +85,7 @@ sudo usermod -aG docker $USER
 == Usage
 
 == Cloning
-If you want to work on the current version of the project, clone the repository and pull all git submodules with the following command. If you want to reproduce experiments presented at conferences or journals, navigate to the respective conference/journal in Section <<_reproduction_instructions_for_conferencesjournals>> and download the zenodo repository.
+If you want to work on the current version of the project, clone the repository and pull all git submodules with the following command. 
 
 [source]
 ----
