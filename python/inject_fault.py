@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import docker
 import typer
 import signal
@@ -18,6 +18,20 @@ class FaultAndRecoveryModel:
     ars_recovery_time_s: float
     fault_detection_time_range_s: tuple
     this_ARS_number_in_the_server_list: int
+
+
+@dataclass()
+class StopOnceState:
+    containers_to_stop: List
+    services_to_stop: List[str]
+    currentServiceIndex: int
+    stop_service_after_sec: int
+
+
+def get_next_service_to_stop_once(stop_once_state: StopOnceState) -> int:
+    if stop_once_state.currentServiceIndex < len(stop_once_state.services_to_stop):
+        return stop_once_state.currentServiceIndex + 1
+    return -1
 
 
 def between(min, max):
@@ -47,6 +61,12 @@ def recover(container, target_service: str):
     time_of_recovery = datetime.now()
 
     logger.info("*%s* recovered @%s", target_service, time_of_recovery)
+    global stop_once_state
+    if stop_once_state is not None:
+        next_service_index_to_stop = get_next_service_to_stop_once(stop_once_state)
+        if next_service_index_to_stop != -1:
+            stop_once_state.currentServiceIndex = next_service_index_to_stop
+            inject_a_fault_once_after_s_seconds(stop_once_state)
 
 
 def is_faulted():
@@ -57,22 +77,18 @@ def inject_a_fault_every_s_seconds(container, target_service: str, s):
     scheduler.add_job(simulate_fault, 'interval', seconds=s, args=[container, target_service])
 
 
-def inject_a_fault_once_after_s_seconds(containers, target_services: List[str], s):
-    max_recovery_time = current_model.fault_detection_time_range_s[1] + current_model.operator_reaction_time_s + current_model.ars_recovery_time_s
+def inject_a_fault_once_after_s_seconds(stop_once_state: StopOnceState):
+    container = stop_once_state.containers_to_stop[stop_once_state.currentServiceIndex]
+    target_service = stop_once_state.services_to_stop[stop_once_state.currentServiceIndex]
 
-    run_date_for_next_job = datetime.now() + timedelta(seconds=s)
-    for i in range(0, len(target_services)):
-        container = containers[i]
-        target_service = target_services[i]
+    run_date_for_next_job = datetime.now() + timedelta(seconds=stop_once_state.stop_service_after_sec)
+    scheduler.add_job(
+            simulate_fault, 
+            'date',
+            run_date=run_date_for_next_job,
+            args=[container, target_service]
+    )
 
-        scheduler.add_job(
-                simulate_fault, 
-                'date',
-                run_date=run_date_for_next_job,
-                args=[container, target_service]
-        )
-        # next service should go down after this one recovered and the number of seconds 's' given by the caller.
-        run_date_for_next_job += timedelta(seconds=max_recovery_time + s)
 
 def inject_three_faults_in_a_row(container, target_service):
     due_date1 = datetime.now() + timedelta(0, minutes=5)
@@ -88,7 +104,7 @@ def inject_three_faults_in_a_row(container, target_service):
 def simulate_fault(container, target_service):
     """
     simulate a fault:
-
+    *
     * this method causes the function `is_faulted` to return true for `chosen_fault_time` seconds.
     * `chosen_fault_time` is set using the fault_detection_time_range_s of the current_model.
     """
@@ -148,6 +164,8 @@ time_of_last_fault = datetime.now()
 time_of_recovery = datetime.now()
 chosen_fault_time: float = 0
 _is_faulted = False
+
+stop_once_state: Optional[StopOnceState] = None
 
 # Configure logging
 logging.basicConfig(
@@ -229,7 +247,9 @@ def main(
             if fault_mode == "stop" or fault_mode == "stop_once":
                 scheduler.start()
                 if fault_mode == "stop_once":
-                    inject_a_fault_once_after_s_seconds(containers, target_service, duration_up)
+                    global stop_once_state
+                    stop_once_state = StopOnceState(containers_to_stop=containers, services_to_stop=target_service, currentServiceIndex=0, stop_service_after_sec=duration_up)
+                    inject_a_fault_once_after_s_seconds(stop_once_state)
                 else:
                     inject_a_fault_every_s_seconds(containers[0], target_service[0], duration_up)
                 # Block main thread indefinitely
