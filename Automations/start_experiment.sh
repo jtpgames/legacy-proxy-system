@@ -905,18 +905,55 @@ if [[ "$with_fault_injector" == "true" ]]; then
     #  --fault-mode stop --duration-down 10 --duration-up 60 \
     #  > \"$fault_injector_logfile_name_target_service\" 2>&1"
 
+    # Define service arrays
+    ars_services=(ars-comp-1-1 ars-comp-1-2 ars-comp-1-3)
+    legacy_proxies=(proxy-1)
+    ng_legacy_proxies=(proxy1-1 proxy2-1)
+    target_services=(target-service)
+
+    # Select legacy proxies depending on experiment type
     if [[ "$experiment_type" == "legacy" ]]; then
-      screen -dmS inject_fault_session_2 bash -c \
-        "python inject_fault.py --target-service ars-comp-1-1 --target-service proxy-1 --target-service target-service \
-        --fault-mode stop_once --duration-down 10 --duration-up 20 \
-        > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
+      proxies=("${legacy_proxies[@]}")
     else
-      screen -dmS inject_fault_session_2 bash -c \
-        "python inject_fault.py --target-service ars-comp-1-1 --target-service proxy1-1 --target-service proxy2-1 --target-service target-service \
-        --fault-mode stop_once --duration-down 10 --duration-up 20 \
-        > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
+      proxies=("${ng_legacy_proxies[@]}")
     fi
+
+    # Build combined service list
+    all_services=("${ars_services[@]}" "${proxies[@]}" "${target_services[@]}")
+
+    # A fault injector with fault-mode stop_once stops one "target-service" at a time, beginning after "duration_up" seconds.
+    # The next service is stopped after the first recovered + duration_up seconds.
+    # The maximum recovery time is calculated based on the configuration of the FaultAndRecoveryModel. 
+    # # experiment_runtime = number_of_faults_to_inject * (duration_up + maximum_recovery_time)
+  
+    duration_up=20
+    maximum_recovery_time=37.5
     
+    # Calculate required experiment runtime
+    number_of_faults_to_inject=${#all_services[@]}
+    experiment_runtime_seconds=$(awk -v n="$number_of_faults_to_inject" \
+      -v up="$duration_up" \
+      -v rec="$maximum_recovery_time" \
+      'BEGIN { print n * (up + rec) }')
+
+    # perform integer cast to truncate and add 59 before dividing by 60, thus, implementing a ceiling function that
+    # always rounds to the next minute.
+    experiment_runtime_minutes=$(awk -v s="$experiment_runtime_seconds" \
+      'BEGIN { print int((s + 59) / 60) }')
+
+    echo "Number of services: $number_of_faults_to_inject"
+    echo "Experiment runtime: $experiment_runtime_seconds seconds"
+    echo "Experiment runtime: $experiment_runtime_minutes minutes"
+
+    # Adjust experiment duration (overwrite user input)
+    failover_experiment_duration_minutes=$experiment_runtime_minutes
+
+    # Run fault injection
+    screen -dmS inject_fault_session_2 bash -c \
+      "python inject_fault.py $(printf -- '--target-service %s ' "${all_services[@]}") \
+      --fault-mode stop_once --duration-down 10 --duration-up 20 \
+      > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
+
     echo "Fault Injectors started"
 else
     echo "Running without Fault Injectors"
