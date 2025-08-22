@@ -29,7 +29,7 @@ class StopOnceState:
 
 
 def get_next_service_to_stop_once(stop_once_state: StopOnceState) -> int:
-    if stop_once_state.currentServiceIndex < len(stop_once_state.services_to_stop):
+    if stop_once_state.currentServiceIndex + 1 < len(stop_once_state.services_to_stop):
         return stop_once_state.currentServiceIndex + 1
     return -1
 
@@ -159,7 +159,7 @@ model_production_ideal = FaultAndRecoveryModel(1, 0.5, (26, 34), 2)
 
 current_model = model_production_ideal
 
-scheduler = BackgroundScheduler(misfire_grace_time=100)
+scheduler = BackgroundScheduler(misfire_grace_time=None)
 time_of_last_fault = datetime.now()
 time_of_recovery = datetime.now()
 chosen_fault_time: float = 0
@@ -226,10 +226,13 @@ def main(
     fault_mode: str = typer.Option("stop", help="Fault mode: stop, stop_once, net, cpu"),
     duration_down: int = typer.Option(10, help="Seconds the fault is applied. Does not apply for stop mode."),
     duration_up: int = typer.Option(30, help="Seconds between faults"),
+    initial_wait: float = typer.Option(0, help="Seconds before injecting faults"),
 ):
     logger.info("Starting fault injection - target_service: '%s', fault_mode: '%s', duration_down: %d, duration_up: %d", 
                 target_service, fault_mode, duration_down, duration_up)
-  
+ 
+    sleep(initial_wait)
+
     # initialize the random seed value to get reproducible random sequences
     seed(42)
 
