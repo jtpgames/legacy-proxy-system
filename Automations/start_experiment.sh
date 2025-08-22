@@ -501,7 +501,9 @@ cleanup() {
     echo "Stopping Fault injectors and terminating screen session..."
     pgrep -f 'python inject_fault.py' | xargs -r kill -TERM
     sleep 1
-    screen -S inject_fault_session_1 -X quit 2>/dev/null || true
+    screen -S inject_fault_session_ars_1 -X quit 2>/dev/null || true
+    screen -S inject_fault_session_ars_2 -X quit 2>/dev/null || true
+    screen -S inject_fault_session_ars_3 -X quit 2>/dev/null || true
     screen -S inject_fault_session_2 -X quit 2>/dev/null || true
 
     echo "Stopping load testers and waiting for an additional 10 seconds grace period"
@@ -586,26 +588,34 @@ cleanup() {
       activate_venv_in_current_dir
       if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
         echo "python loadtest_plotter.py \"$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust_log_1.log\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3\" \
           -o \"$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf\""
         
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust_log_1.log" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
 
           validate_equal_number_of_requests_send_and_received
           calculate_time_difference_between_sending_and_finish_processing
       else
         echo "python loadtest_plotter.py \"$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2\" \
+          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3\" \
           -o \"$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf\""
         
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_proxy_1" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_target_service" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2" \
+          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
 
           validate_equal_number_of_requests_send_and_received
@@ -891,20 +901,37 @@ echo "Starting services with docker-compose..."
 execute_docker_compose build
 execute_docker_compose up -d
 
-fault_injector_logfile_name_target_service="${fault_injector_logfile_base_name}_target_service.log"
-fault_injector_logfile_name_proxy_1="${fault_injector_logfile_base_name}_proxy_1.log"
+fault_injector_logfile_name_ars_1="${fault_injector_logfile_base_name}_ars_1.log"
+fault_injector_logfile_name_ars_2="${fault_injector_logfile_base_name}_ars_2.log"
+fault_injector_logfile_name_ars_3="${fault_injector_logfile_base_name}_ars_3.log"
+fault_injector_logfile_name_stop_once="${fault_injector_logfile_base_name}_stop_once.log"
 
-touch $fault_injector_logfile_name_target_service
-touch $fault_injector_logfile_name_proxy_1
+touch $fault_injector_logfile_name_ars_1
+touch $fault_injector_logfile_name_stop_once
 if [[ "$with_fault_injector" == "true" ]]; then
     echo "Fault Injector starting ..."
     activate_venv_in_current_dir
 
-    # screen -dmS inject_fault_session_1 bash -c \
-    # "python inject_fault.py --target-service target-service \
-    #  --fault-mode stop --duration-down 10 --duration-up 60 \
-    #  > \"$fault_injector_logfile_name_target_service\" 2>&1"
+    duration_up=20
+    maximum_recovery_time=37.5
 
+    screen -dmS inject_fault_session_ars_1 bash -c \
+      "python inject_fault.py --target-service ars-comp-1-1 \
+      --fault-mode stop_once --duration-up 20 \
+      > \"$fault_injector_logfile_name_ars_1\" 2>&1"
+
+    screen -dmS inject_fault_session_ars_2 bash -c \
+      "python inject_fault.py --target-service ars-comp-1-2 \
+      --fault-mode stop_once --duration-up 20 \
+      > \"$fault_injector_logfile_name_ars_2\" 2>&1"
+    
+    screen -dmS inject_fault_session_ars_3 bash -c \
+      "python inject_fault.py --target-service ars-comp-1-3 \
+      --fault-mode stop_once --duration-up 20 \
+      > \"$fault_injector_logfile_name_ars_3\" 2>&1"
+    
+    time_before_starting_second_fault_injector_sec=$(echo "20 + $maximum_recovery_time" | bc)
+    
     # Define service arrays
     ars_services=(ars-comp-1-1 ars-comp-1-2 ars-comp-1-3)
     legacy_proxies=(proxy-1)
@@ -925,9 +952,6 @@ if [[ "$with_fault_injector" == "true" ]]; then
     # The next service is stopped after the first recovered + duration_up seconds.
     # The maximum recovery time is calculated based on the configuration of the FaultAndRecoveryModel. 
     # # experiment_runtime = number_of_faults_to_inject * (duration_up + maximum_recovery_time)
-  
-    duration_up=20
-    maximum_recovery_time=37.5
     
     # Calculate required experiment runtime
     number_of_faults_to_inject=${#all_services[@]}
@@ -935,6 +959,8 @@ if [[ "$with_fault_injector" == "true" ]]; then
       -v up="$duration_up" \
       -v rec="$maximum_recovery_time" \
       'BEGIN { print n * (up + rec) }')
+
+    experiment_runtime_seconds=$(echo "$experiment_runtime_seconds + $time_before_starting_second_fault_injector_sec" | bc)
 
     # perform integer cast to truncate and add 59 before dividing by 60, thus, implementing a ceiling function that
     # always rounds to the next minute.
@@ -951,8 +977,8 @@ if [[ "$with_fault_injector" == "true" ]]; then
     # Run fault injection
     screen -dmS inject_fault_session_2 bash -c \
       "python inject_fault.py $(printf -- '--target-service %s ' "${all_services[@]}") \
-      --fault-mode stop_once --duration-down 10 --duration-up 20 \
-      > \"$fault_injector_logfile_name_proxy_1\" 2>&1"
+      --fault-mode stop_once --duration-up 20 --initial-wait $time_before_starting_second_fault_injector_sec \
+      > \"$fault_injector_logfile_name_stop_once\" 2>&1"
 
     echo "Fault Injectors started"
 else
