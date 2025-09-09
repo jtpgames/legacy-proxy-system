@@ -381,14 +381,16 @@ calculate_network_latencies_between_services_for_request_id() {
 }
 
 validate_equal_number_of_requests_send_and_received() {
-  echo "-- validate_equal_number_of_requests_send_and_received --"  
+  # Create/clear the log file
+  echo "-- validate_equal_number_of_requests_send_and_received --" > validate_equal_number_of_requests_send_and_received.log
+  echo "-- validate_equal_number_of_requests_send_and_received --"
 
   cd "$root_folder/Automations/$target_folder_for_logs"
-  echo "Determining if all requests that have been sent by the load tester have been successfully received and processed by the Simulator..."
+  echo "Determining if all requests that have been sent by the load tester have been successfully received and processed by the Simulator..." | tee -a validate_equal_number_of_requests_send_and_received.log
   # Count matches in LoadTester_Logs (for failover experiment locust_log_1.log, for performance experiment every file matching the pattern worker_*.log)
   # the following regex captures the request-id enclosed in () from the capture group (\d+) and only for the first send to the first server (7081)
   # ignoring retries to the other servers.
-  echo "Determining distinct request-ids..."
+  echo "Determining distinct request-ids..." | tee -a validate_equal_number_of_requests_send_and_received.log
 
   if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
     count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log | sort -u | tee request_ids.txt | wc -l)
@@ -408,27 +410,28 @@ validate_equal_number_of_requests_send_and_received() {
     eval "$nullglob_was_set"
   fi
 
-  echo "Count corresponding matches in Simulator_Logs/gs_simulation.log"
+  echo "Count corresponding matches in Simulator_Logs/gs_simulation.log" | tee -a validate_equal_number_of_requests_send_and_received.log
   # count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | grep -Ff - Simulator_Logs/gs_simulation.log | wc -l)
   count_file2=$(sed 's/$/, CMD-ENDE/' request_ids.txt | rg --fixed-strings --file=- Simulator_Logs/gs_simulation.log | wc -l)
 
-  echo "Number of received alarm messages:"
-  grep -c "200 OK:.*ID_REQ_KC_STORE.*" "Simulator_Logs/gs_simulation.log"
+  echo "Number of received alarm messages:" | tee -a validate_equal_number_of_requests_send_and_received.log
+  alarm_count=$(grep -c "200 OK:.*ID_REQ_KC_STORE.*" "Simulator_Logs/gs_simulation.log")
+  echo "$alarm_count" | tee -a validate_equal_number_of_requests_send_and_received.log
 
   rg -o 'UID:\s([^,]+),\s*CMD-ENDE\s*ID_REQ_KC_STORE7D3BPACKET' Simulator_Logs/gs_simulation.log \
     | sed -E 's/UID:[[:space:]]([^,]+),[[:space:]]*CMD-ENDE[[:space:]]*ID_REQ_KC_STORE7D3BPACKET/\1/' \
     | sort -u \
     > request_ids_simulator.txt
 
-  echo "Request-Ids only in request_ids.txt"
-  comm -23 request_ids.txt request_ids_simulator.txt
-  echo "Request-Ids only in request_ids_simulator.txt"
-  comm -13 request_ids.txt request_ids_simulator.txt
+  echo "Request-Ids only in request_ids.txt" | tee -a validate_equal_number_of_requests_send_and_received.log
+  comm -23 request_ids.txt request_ids_simulator.txt | tee -a validate_equal_number_of_requests_send_and_received.log
+  echo "Request-Ids only in request_ids_simulator.txt" | tee -a validate_equal_number_of_requests_send_and_received.log
+  comm -13 request_ids.txt request_ids_simulator.txt | tee -a validate_equal_number_of_requests_send_and_received.log
 
-  echo "Request-Ids in locust_log_1.log: $count_request_ids_load_tester"
-  echo "Matches in gs_simulation.log: $count_file2"
+  echo "Request-Ids in locust_log_1.log: $count_request_ids_load_tester" | tee -a validate_equal_number_of_requests_send_and_received.log
+  echo "Matches in gs_simulation.log: $count_file2" | tee -a validate_equal_number_of_requests_send_and_received.log
   if [ "$count_request_ids_load_tester" -eq "$count_file2" ]; then
-    echo "Number of requests matches."
+    echo "Number of requests matches." | tee -a validate_equal_number_of_requests_send_and_received.log
   fi
 }
 
