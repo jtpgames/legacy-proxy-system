@@ -381,11 +381,11 @@ calculate_network_latencies_between_services_for_request_id() {
 }
 
 validate_equal_number_of_requests_send_and_received() {
-  # Create/clear the log file
-  echo "-- validate_equal_number_of_requests_send_and_received --" > validate_equal_number_of_requests_send_and_received.log
   echo "-- validate_equal_number_of_requests_send_and_received --"
 
   cd "$root_folder/Automations/$target_folder_for_logs"
+  # Create/clear the log file
+  echo "-- validate_equal_number_of_requests_send_and_received --" > validate_equal_number_of_requests_send_and_received.log
   echo "Determining if all requests that have been sent by the load tester have been successfully received and processed by the Simulator..." | tee -a validate_equal_number_of_requests_send_and_received.log
   # Count matches in LoadTester_Logs (for failover experiment locust_log_1.log, for performance experiment every file matching the pattern worker_*.log)
   # the following regex captures the request-id enclosed in () from the capture group (\d+) and only for the first send to the first server (7081)
