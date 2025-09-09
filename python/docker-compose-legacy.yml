@@ -12,7 +12,7 @@ services:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
       - SERVICE_NAME=ars-comp-1-1
-      - TARGET_URL=http://proxy-1:8080/ID_REQ_KC_STORE7D3BPACKET
+      - TARGET_URL=http://ars-comp-2-1:8080/ID_REQ_KC_STORE7D3BPACKET
       - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
@@ -22,7 +22,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
-      proxy-1:
+      ars-comp-2-1:
         condition: service_healthy
   
   ars-comp-1-2:
@@ -36,7 +36,7 @@ services:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
       - SERVICE_NAME=ars-comp-1-2
-      - TARGET_URL=http://proxy-2:8080/ID_REQ_KC_STORE7D3BPACKET
+      - TARGET_URL=http://ars-comp-2-2:8080/ID_REQ_KC_STORE7D3BPACKET
       - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
@@ -46,7 +46,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
-      proxy-2:
+      ars-comp-2-2:
         condition: service_healthy
   
   ars-comp-1-3:
@@ -60,7 +60,7 @@ services:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
       - SERVICE_NAME=ars-comp-1-3
-      - TARGET_URL=http://proxy-3:8080/ID_REQ_KC_STORE7D3BPACKET
+      - TARGET_URL=http://ars-comp-2-3:8080/ID_REQ_KC_STORE7D3BPACKET
       - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
@@ -70,12 +70,12 @@ services:
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     depends_on:
-      proxy-3:
+      ars-comp-2-3:
         condition: service_healthy
   
-  proxy-1:
+  ars-comp-2-1:
     image: python:3.12-slim
-    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy.py"
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_2_proxy.py"
     cap_add:
       - NET_ADMIN
     ports:
@@ -83,12 +83,12 @@ services:
     environment:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
-      - SERVICE_NAME=proxy-1
+      - SERVICE_NAME=ars-comp-2-1
       - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
       - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
-      - ./legacy_proxy.py:/app/legacy_proxy.py
+      - ./ars_comp_2_proxy.py:/app/ars_comp_2_proxy.py
       - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
@@ -100,9 +100,9 @@ services:
       interval: 10s
       retries: 10
 
-  proxy-2:
+  ars-comp-2-2:
     image: python:3.12-slim
-    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy.py"
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_2_proxy.py"
     cap_add:
       - NET_ADMIN
     ports:
@@ -110,12 +110,12 @@ services:
     environment:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
-      - SERVICE_NAME=proxy-2
+      - SERVICE_NAME=ars-comp-2-2
       - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
       - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
-      - ./legacy_proxy.py:/app/legacy_proxy.py
+      - ./ars_comp_2_proxy.py:/app/ars_comp_2_proxy.py
       - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro
@@ -127,9 +127,9 @@ services:
       interval: 10s
       retries: 10
 
-  proxy-3:
+  ars-comp-2-3:
     image: python:3.12-slim
-    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy.py"
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_2_proxy.py"
     cap_add:
       - NET_ADMIN
     ports:
@@ -137,12 +137,12 @@ services:
     environment:
       - HTTP_PORT=8080
       - HTTP_HOST=0.0.0.0
-      - SERVICE_NAME=proxy-3
+      - SERVICE_NAME=ars-comp-2-3
       - TARGET_URL=http://target-service:1337/ID_REQ_KC_STORE7D3BPACKET
       - HOST_OS=${HOST_OS:-unknown}
     volumes:
       - ./logs:/app/logs
-      - ./legacy_proxy.py:/app/legacy_proxy.py
+      - ./ars_comp_2_proxy.py:/app/ars_comp_2_proxy.py
       - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
       - ./requirements.txt:/app/requirements.txt
       - /etc/localtime:/etc/localtime:ro

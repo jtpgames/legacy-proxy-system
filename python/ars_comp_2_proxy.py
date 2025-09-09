@@ -21,7 +21,7 @@ logger.setLevel(logging.DEBUG)
 uvicorn_logger = logging.getLogger("uvicorn")
 uvicorn_logger.setLevel(logging.INFO)
 
-file_name = f'logs/{os.getenv("SERVICE_NAME", "legacy_proxy")}.log'
+file_name = f'logs/{os.getenv("SERVICE_NAME", "ars_comp_2_proxy")}.log'
 handler = RotatingFileHandler(
     file_name,
     maxBytes=10*1024*1024,  # 10MB
@@ -58,8 +58,8 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI app with lifespan
 app = FastAPI(
-    title="Legacy Proxy", 
-    description="HTTP to Legacy system service",
+    title="ARS Component 2 Proxy", 
+    description="HTTP to target system service",
     lifespan=lifespan
 )
 
