@@ -21,7 +21,7 @@ logger.setLevel(logging.DEBUG)
 uvicorn_logger = logging.getLogger("uvicorn")
 uvicorn_logger.setLevel(logging.INFO)
 
-file_name = f'logs/{os.getenv("SERVICE_NAME", "ars_comp_2_proxy")}.log'
+file_name = f'logs/{os.getenv("SERVICE_NAME", "ARS_Comp_2")}.log'
 handler = RotatingFileHandler(
     file_name,
     maxBytes=10*1024*1024,  # 10MB
