@@ -939,7 +939,7 @@ if [[ "$with_fault_injector" == "true" ]]; then
     ars_services=(ars-comp-1-1 ars-comp-1-2 ars-comp-1-3)
     legacy_proxies=(ars-comp-2-1)
     ng_legacy_proxies=(proxy1-1 proxy2-1)
-    target_services=(target-service)
+    target_services=(ars-comp-3)
 
     # Select legacy proxies depending on experiment type
     if [[ "$experiment_type" == "legacy" ]]; then
@@ -951,7 +951,7 @@ if [[ "$with_fault_injector" == "true" ]]; then
     # Build combined service list
     all_services=("${ars_services[@]}" "${proxies[@]}" "${target_services[@]}")
 
-    # A fault injector with fault-mode stop_once stops one "target-service" at a time, beginning after "duration_up" seconds.
+    # A fault injector with fault-mode stop_once stops one "ars-comp-3" at a time, beginning after "duration_up" seconds.
     # The next service is stopped after the first recovered + duration_up seconds.
     # The maximum recovery time is calculated based on the configuration of the FaultAndRecoveryModel. 
     # # experiment_runtime = number_of_faults_to_inject * (duration_up + maximum_recovery_time)
