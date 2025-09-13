@@ -4,3 +4,5 @@ logs/
 python/docker-compose.yml
 Baseline_Experiment/
 NG_Experiment/
+
+*/docker-compose-*.png
