@@ -76,7 +76,7 @@ class MQTTToHTTPForwarder:
             logger.info(f"[{request_id}] Received message {msg.mid} on topic {msg.topic} (QoS {msg.qos}, DUP {msg.dup}): {payload}")
 
             headers = {"Request-Id": f"{request_id}"}
-            response = requests.post(TARGET_URL, headers=headers, json=payload)
+            response = requests.post(TARGET_URL, headers=headers, json=json_payload)
             response.raise_for_status()
             logger.info(f"[{request_id}] Successfully forwarded message to {TARGET_URL}")
             
