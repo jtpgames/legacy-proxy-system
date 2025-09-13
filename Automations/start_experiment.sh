@@ -938,7 +938,7 @@ if [[ "$with_fault_injector" == "true" ]]; then
     # Define service arrays
     ars_services=(ars-comp-1-1 ars-comp-1-2 ars-comp-1-3)
     legacy_proxies=(ars-comp-2-1)
-    ng_legacy_proxies=(proxy1-1 proxy2-1)
+    ng_legacy_proxies=(proxy1-1 proxy2-1 ars-comp-2-1)
     target_services=(ars-comp-3)
 
     # Select legacy proxies depending on experiment type
