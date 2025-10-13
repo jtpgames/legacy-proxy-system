@@ -591,34 +591,34 @@ cleanup() {
       activate_venv_in_current_dir
       if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
         echo "python loadtest_plotter.py \"$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust_log_1.log\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3\" \
+          -f \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once\" \
+          -f \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1\" \
+          -f \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2\" \
+          -f \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3\" \
           -o \"$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf\""
         
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust_log_1.log" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3" \
+          -f "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once" \
+          -f "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1" \
+          -f "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2" \
+          -f "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
 
           validate_equal_number_of_requests_send_and_received
           calculate_time_difference_between_sending_and_finish_processing
       else
         echo "python loadtest_plotter.py \"$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2\" \
-          \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3\" \
+          -f \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once\" \
+          -f \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1\" \
+          -f \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2\" \
+          -f \"$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3\" \
           -o \"$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf\""
         
         python loadtest_plotter.py "$root_folder/Automations/$target_folder_for_logs/LoadTester_Logs/locust-parameter-variation.log" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2" \
-          "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3" \
+          -f "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_stop_once" \
+          -f "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_1" \
+          -f "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_2" \
+          -f "$root_folder/Automations/$target_folder_for_logs/$fault_injector_logfile_name_ars_3" \
           -o "$root_folder/Automations/$target_folder_for_logs/results_$failover_or_performance_load.pdf"
 
           validate_equal_number_of_requests_send_and_received
@@ -1031,7 +1031,7 @@ rm -fv locust_logs/prod_workload/*
 rm -fv locust_logs/ad_workload/* 
 
 cmd_prod_workload='python executor.py locust/gen_gs_prod_workload.py -u http://host.docker.internal:8084'
-echo "Launching Production Workload directly on the last ARS component"
+echo "Launching Production Background Workload directly on the last ARS component"
 
 # Detect if running on Linux with Docker engine (not Podman)
 ADD_HOST_FLAG=""
@@ -1054,7 +1054,7 @@ echo "Launching Alarm Device workload to the first ARS component"
 if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
   cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload_2.py -u http://host.docker.internal:7081,http://host.docker.internal:7082,http://host.docker.internal:7083 -m 1'
 else
-  cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload_2.py -u http://host.docker.internal:7081,http://host.docker.internal:7082,http://host.docker.internal:7083 -m 500 -p'
+  cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload_2.py -u http://host.docker.internal:7081,http://host.docker.internal:7082,http://host.docker.internal:7083 -m 250 -p'
 fi
 
 docker run -d \
