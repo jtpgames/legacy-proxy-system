@@ -23,6 +23,9 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass
 from datetime import datetime
+import tempfile
+import os
+import glob
 
 @dataclass
 class FileData:
@@ -93,6 +96,146 @@ class ErrorStats:
 
 app = typer.Typer()
 
+def discover_and_group_worker_logs(log_dir: Path) -> Dict[str, List[Path]]:
+    """
+    Discover worker log files in the directory and group them by group_id.
+    
+    Worker log files follow the pattern: worker_log_<group_id>.<worker_id>.log
+    where group_id is the first number and represents one load test execution,
+    and worker_id is the second number representing individual workers.
+    
+    Args:
+        log_dir: Directory containing worker log files
+        
+    Returns:
+        Dictionary mapping group_id to list of worker log file paths
+    """
+    worker_logs = defaultdict(list)
+    
+    # Find all worker log files
+    log_files = list(log_dir.glob("worker_log_*.log"))
+    
+    typer.echo(f"Found {len(log_files)} worker log files in {log_dir}")
+    
+    if not log_files:
+        typer.echo(f"No worker log files found matching pattern 'worker_log_*.log' in {log_dir}")
+        return worker_logs
+    
+    # Parse filenames and group by group_id
+    for log_file in log_files:
+        filename = log_file.name
+        # Parse pattern: worker_log_<group_id>.<worker_id>.log
+        # Example: worker_log_500.1.log -> group_id = "500", worker_id = "1"
+        # Example: worker_log_1250.2.log -> group_id = "1250", worker_id = "2"
+        
+        try:
+            # Remove 'worker_log_' prefix and '.log' suffix
+            name_part = filename[len("worker_log_"):-len(".log")]
+            # Split by dots
+            parts = name_part.split(".")
+            
+            if len(parts) >= 2:
+                # group_id is the first number (load test execution)
+                group_id = parts[0]
+                worker_id = parts[1]
+                worker_logs[group_id].append(log_file)
+                typer.echo(f"  {filename} -> group_id: {group_id}, worker_id: {worker_id}")
+            else:
+                typer.echo(f"  Warning: Could not parse group_id from {filename}")
+        except Exception as e:
+            typer.echo(f"  Warning: Error parsing {filename}: {e}")
+    
+    # Sort files within each group for consistent processing
+    for group_id in worker_logs:
+        worker_logs[group_id].sort()
+    
+    typer.echo(f"Grouped into {len(worker_logs)} groups: {list(worker_logs.keys())}")
+    return dict(worker_logs)
+
+def create_consolidated_temp_files(worker_groups: Dict[str, List[Path]]) -> List[Path]:
+    """
+    Create temporary consolidated files for each group of worker logs.
+    
+    Each temporary file contains all relevant response time and error data
+    from all worker log files in that group.
+    
+    Args:
+        worker_groups: Dictionary mapping group_id to list of worker log files
+        
+    Returns:
+        List of temporary file paths, one for each group (sorted by group_id numerically)
+    """
+    temp_files = []
+    
+    # Sort groups by group_id numerically
+    sorted_group_ids = sorted(worker_groups.keys(), key=lambda x: int(x))
+    
+    for group_id in sorted_group_ids:
+        worker_files = worker_groups[group_id]
+        typer.echo(f"\nCreating consolidated file for group {group_id} ({len(worker_files)} worker files)...")
+        
+        # Create temporary file
+        temp_fd, temp_path = tempfile.mkstemp(suffix=f"_group_{group_id}.log", prefix="consolidated_")
+        temp_file_path = Path(temp_path)
+        
+        try:
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as temp_file:
+                # Write consolidated data from all worker files in this group
+                for worker_file in worker_files:
+                    typer.echo(f"  Processing {worker_file.name}...")
+                    
+                    try:
+                        with open(worker_file, 'r', encoding='utf-8') as wf:
+                            for line in wf:
+                                # Check if we've reached the "Stopping user" line
+                                if 'Stopping user' in line:
+                                    # Include the stopping line and then stop processing this file
+                                    temp_file.write(line)
+                                    break
+                                
+                                # Only include lines that are relevant for analysis
+                                # This includes response time lines and error lines
+                                if any(pattern in line for pattern in [
+                                    'Response time',  # Response time data
+                                    'ERROR',          # Error messages
+                                    'Warm-Up finished',  # Warmup indicator
+                                    'Regular load profile starts'  # Load profile indicator
+                                ]):
+                                    temp_file.write(line)
+                                # Also include INFO lines that contain response time info
+                                elif '/INFO/' in line and ('Response time' in line or 'ms' in line):
+                                    temp_file.write(line)
+                    except Exception as e:
+                        typer.echo(f"    Warning: Could not read {worker_file}: {e}")
+            
+            temp_files.append(temp_file_path)
+            typer.echo(f"  Created consolidated file: {temp_file_path}")
+            
+        except Exception as e:
+            typer.echo(f"  Error creating consolidated file for group {group_id}: {e}")
+            # Clean up the file descriptor if something went wrong
+            try:
+                os.close(temp_fd)
+            except:
+                pass
+    
+    return temp_files
+
+def cleanup_temp_files(temp_files: List[Path]):
+    """
+    Clean up temporary consolidated files.
+    
+    Args:
+        temp_files: List of temporary file paths to remove
+    """
+    for temp_file in temp_files:
+        try:
+            if temp_file.exists():
+                temp_file.unlink()
+                typer.echo(f"Cleaned up temporary file: {temp_file}")
+        except Exception as e:
+            typer.echo(f"Warning: Could not clean up {temp_file}: {e}")
+
 def parse_multiple_log_files(log_files: List[Path]) -> List[FileData]:
     """
     Parse multiple log files and return a list of FileData objects.
@@ -110,13 +253,25 @@ def parse_multiple_log_files(log_files: List[Path]) -> List[FileData]:
         typer.echo(f"Parsing {log_file.name}...")
         response_times, error_stats, response_timestamps, error_timestamps, start_time = parse_log_file(log_file)
         
-        # Create a human-readable label using experiment type
-        try:
-            experiment_type = log_file.parent.parent.name
-            base_file_label = experiment_type
-        except (AttributeError, IndexError):
-            # Fallback to filename if we can't determine experiment type
-            base_file_label = log_file.stem
+        # Create a human-readable label
+        # For consolidated worker log files, extract group_id from filename
+        if "consolidated_" in log_file.name and "_group_" in log_file.name:
+            # Extract group_id from consolidated file name (e.g., "consolidated_xyz_group_500.log" -> "500")
+            try:
+                # Find the part after "_group_" and before ".log"
+                group_part = log_file.name.split("_group_")[1].split(".")[0]
+                base_file_label = f"Group {group_part}"
+            except (IndexError, AttributeError):
+                # Fallback to filename if parsing fails
+                base_file_label = log_file.stem
+        else:
+            # For regular log files, use experiment type
+            try:
+                experiment_type = log_file.parent.parent.name
+                base_file_label = experiment_type
+            except (AttributeError, IndexError):
+                # Fallback to filename if we can't determine experiment type
+                base_file_label = log_file.stem
         
         # Handle duplicate labels by adding numeric postfixes
         if base_file_label in used_labels:
@@ -156,6 +311,9 @@ def parse_log_file(file_path: Path) -> Tuple[Dict[str, List[float]], ErrorStats,
     # Pattern to match response time lines in INFO logs: (METHOD endpoint) Response time X ms
     response_pattern = re.compile(r'/INFO/root:\s+\(([A-Z]+\s+\w+)\)\s+Response\s+time\s+(\d+)\s+ms')
     
+    # Pattern for worker log files: Response time X ms (request type is always "Alarm")
+    worker_response_pattern = re.compile(r'Response\s+time\s+(\d+)\s+ms')
+    
     # Pattern to match error lines and capture the error message
     error_pattern = re.compile(r'ERROR/root: user\d+: (.*)$')
     
@@ -163,7 +321,9 @@ def parse_log_file(file_path: Path) -> Tuple[Dict[str, List[float]], ErrorStats,
     timestamp_pattern = re.compile(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})\]')
    
     warmup_pattern = re.compile(r'Warm-Up finished.*Regular load profile starts', re.IGNORECASE)
-    warmup_finished = False
+    # For worker logs (consolidated files), skip warmup detection since they don't contain warmup messages
+    is_worker_log = "consolidated_" in str(file_path) and "_group_" in str(file_path)
+    warmup_finished = is_worker_log  # Start as finished for worker logs
     
     def parse_timestamp(timestamp_str: str) -> float:
         """Parse timestamp string to seconds since epoch."""
@@ -190,8 +350,10 @@ def parse_log_file(file_path: Path) -> Tuple[Dict[str, List[float]], ErrorStats,
                     if start_time is None:
                         start_time = current_timestamp
 
-                # Check for response time entries
+                # Check for response time entries (original format)
                 response_match = response_pattern.search(line)
+                worker_response_match = worker_response_pattern.search(line)
+                
                 if response_match:
                     request_type = response_match.group(1)
                     response_time = float(response_match.group(2))
@@ -202,7 +364,18 @@ def parse_log_file(file_path: Path) -> Tuple[Dict[str, List[float]], ErrorStats,
                         relative_time = current_timestamp - start_time
                         response_timestamps[request_type].append(relative_time)
                 
-                # Check for error entries
+                # Check for response time entries (worker log format)
+                elif worker_response_match:
+                    request_type = "Alarm"  # Worker logs are always for Alarm requests
+                    response_time = float(worker_response_match.group(1))
+                    response_times[request_type].append(response_time)
+                    
+                    # Store relative timestamp for scatter plot
+                    if current_timestamp and start_time:
+                        relative_time = current_timestamp - start_time
+                        response_timestamps[request_type].append(relative_time)
+                
+                # Check for error entries (only if no response time found)
                 else:
                     error_match = error_pattern.search(line)
                     if error_match:
@@ -853,7 +1026,7 @@ def print_multi_file_summary(file_data_list: List[FileData], metric_type: str = 
     
     # Summary for each file
     for i, file_data in enumerate(file_data_list, 1):
-        typer.echo(f"\n[{i}] FILE: {file_data.file_path.name}")
+        typer.echo(f"\n[{i}] {file_data.file_label.upper()}:")
         typer.echo("-" * 60)
         
         # Calculate stats for this file
@@ -929,23 +1102,25 @@ def print_multi_file_summary(file_data_list: List[FileData], metric_type: str = 
 
 @app.command()
 def analyze(
-    log_files: List[Path] = typer.Argument(..., help="Path(s) to the locust log file(s) to analyze"),
-    output_dir: Path = typer.Option(None, "--output-dir", "-o", help="Directory to save the chart (defaults to first log file directory)"),
+    log_dir: Path = typer.Argument(..., help="Directory containing worker log files (pattern: worker_log_*.log)"),
+    output_dir: Path = typer.Option(None, "--output-dir", "-o", help="Directory to save the chart (defaults to the log directory)"),
     publication_ready: bool = typer.Option(False, "--publication", "-p", help="Generate publication-ready plots with academic styling"),
     export_svg: bool = typer.Option(False, "--svg", help="Also export SVG format for better LaTeX compatibility"),
     metric_type: str = typer.Option("average", "--metric-type", "-m", help="Response time metric to plot ('average' or 'median')", case_sensitive=False),
     scatter_plot: bool = typer.Option(False, "--scatter-plot", help="Generate scatter/line plot of response times over time instead of bar charts")
 ):
     """
-    Analyze one or more locust log files and create visualizations showing:
+    Analyze worker log files from a directory and create visualizations showing:
     1. Bar charts: Average or median response times per request type (with request counts displayed)
        and total number of errors by category
     2. Scatter plots: Response times over relative time with error markers (--scatter-plot option)
     
-    When multiple files are provided, data from all files will be plotted
-    in the same chart with different colors/patterns to distinguish between files.
+    Worker log files are grouped by their first number (group_id) representing different load test executions.
+    All worker files from the same group are consolidated before analysis.
     
     Features:
+    - Automatic discovery and grouping of worker log files (pattern: worker_log_<group_id>.<worker_id>.log)
+    - Consolidation of multiple worker files per group
     - Bar chart mode: Total request count in title, request counts within bars, 
       choice between average and median response times
     - Scatter plot mode: Response times plotted over relative time, errors shown as red X markers
@@ -958,62 +1133,79 @@ def analyze(
         typer.echo(f"Error: Invalid metric type '{metric_type}'. Must be 'average' or 'median'.", err=True)
         raise typer.Exit(1)
     
-    # Validate input files
-    for log_file in log_files:
-        if not log_file.exists():
-            typer.echo(f"Error: Log file '{log_file}' does not exist.", err=True)
-            raise typer.Exit(1)
-        
-        if not log_file.is_file():
-            typer.echo(f"Error: '{log_file}' is not a file.", err=True)
-            raise typer.Exit(1)
+    # Validate input directory
+    if not log_dir.exists():
+        typer.echo(f"Error: Directory '{log_dir}' does not exist.", err=True)
+        raise typer.Exit(1)
+    
+    if not log_dir.is_dir():
+        typer.echo(f"Error: '{log_dir}' is not a directory.", err=True)
+        raise typer.Exit(1)
     
     # Set output directory
     if output_dir is None:
-        output_dir = log_files[0].parent  # Use first file's directory
+        output_dir = log_dir  # Use the log directory
     else:
         output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Consistent message format for all cases
-    typer.echo(f"Analyzing {len(log_files)} log file(s):")
-    for log_file in log_files:
-        typer.echo(f"  - {log_file}")
-    
+    typer.echo(f"Analyzing worker log files from directory: {log_dir}")
     typer.echo(f"Output directory: {output_dir}")
     
-    # Parse all log files using the multi-file parser
-    typer.echo("\nParsing log files...")
-    file_data_list = parse_multiple_log_files(log_files)
+    # Discover and group worker log files
+    typer.echo("\nDiscovering and grouping worker log files...")
+    worker_groups = discover_and_group_worker_logs(log_dir)
     
-    # Check if any files have data
-    has_data = False
-    for file_data in file_data_list:
-        if file_data.response_times or file_data.error_stats.total_errors > 0:
-            has_data = True
-            break
-    
-    if not has_data:
-        typer.echo("No response time data or errors found in any log file.")
-        typer.echo("Please check the log file formats.")
+    if not worker_groups:
+        typer.echo("No worker log files found in the specified directory.")
         raise typer.Exit(1)
     
-    # Create and save charts using appropriate chart function
-    if scatter_plot:
-        typer.echo("\nCreating scatter plot...")
-        create_scatter_plot(file_data_list, output_dir, 
-                          publication_ready=publication_ready, 
-                          export_svg=export_svg)
-    else:
-        typer.echo("\nCreating bar charts...")
-        # Use consistent styling for all cases (simplified for better readability)
-        create_multi_file_bar_chart(file_data_list, output_dir, omit_request_count_per_bar_labels=True, 
-                                   simple_title=True, publication_ready=publication_ready, 
-                                   export_svg=export_svg, metric_type=metric_type_lower)
+    # Create consolidated temporary files for each group
+    typer.echo("\nCreating consolidated files...")
+    temp_files = create_consolidated_temp_files(worker_groups)
     
-    # Print summary using multi-file summary function
-    print_multi_file_summary(file_data_list, metric_type_lower)
+    if not temp_files:
+        typer.echo("No consolidated files could be created.")
+        raise typer.Exit(1)
     
-    typer.echo(f"\n✅ Analysis complete! Results saved to {output_dir}")
+    try:
+        # Parse all consolidated files using the existing multi-file parser
+        typer.echo("\nParsing consolidated log files...")
+        file_data_list = parse_multiple_log_files(temp_files)
+        
+        # Check if any files have data
+        has_data = False
+        for file_data in file_data_list:
+            if file_data.response_times or file_data.error_stats.total_errors > 0:
+                has_data = True
+                break
+        
+        if not has_data:
+            typer.echo("No response time data or errors found in any consolidated file.")
+            typer.echo("Please check the worker log file formats.")
+            raise typer.Exit(1)
+        
+        # Create and save charts using appropriate chart function
+        if scatter_plot:
+            typer.echo("\nCreating scatter plot...")
+            create_scatter_plot(file_data_list, output_dir, 
+                              publication_ready=publication_ready, 
+                              export_svg=export_svg)
+        else:
+            typer.echo("\nCreating bar charts...")
+            # Use consistent styling for all cases (simplified for better readability)
+            create_multi_file_bar_chart(file_data_list, output_dir, omit_request_count_per_bar_labels=True, 
+                                       simple_title=True, publication_ready=publication_ready, 
+                                       export_svg=export_svg, metric_type=metric_type_lower)
+        
+        # Print summary using multi-file summary function
+        print_multi_file_summary(file_data_list, metric_type_lower)
+        
+        typer.echo(f"\n✅ Analysis complete! Results saved to {output_dir}")
+        
+    finally:
+        # Always clean up temporary files
+        typer.echo("\nCleaning up temporary files...")
+        cleanup_temp_files(temp_files)
 
 if __name__ == "__main__":
     app()
