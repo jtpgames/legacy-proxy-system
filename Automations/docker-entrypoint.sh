@@ -42,8 +42,8 @@ echo "Contents of /logs:"
 ls /logs -la
 
 echo "Contents of locust_logs/ad_workload and locust_logs/prod_workload:"
-ls locust_logs/ad_workload -la
-ls locust_logs/prod_workload -la
+ls locust_logs/ad_workload -la 2>/dev/null || echo "locust_logs/ad_workload directory does not exist"
+ls locust_logs/prod_workload -la 2>/dev/null || echo "locust_logs/prod_workload directory does not exist"
 rm -rfv locust_logs/* 
 
 # Activate the virtual environment
