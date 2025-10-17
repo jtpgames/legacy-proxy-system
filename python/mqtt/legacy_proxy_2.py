@@ -24,7 +24,7 @@ SERVICE_NAME = os.getenv("SERVICE_NAME", "legacy_proxy_2")
 file_name = f'logs/{SERVICE_NAME}.log'
 handler = RotatingFileHandler(
     file_name,
-    maxBytes=10*1024*1024,  # 10MB
+    maxBytes=100*1024*1024,  # 100MB
     backupCount=5
 )
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
