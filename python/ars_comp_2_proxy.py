@@ -10,6 +10,8 @@ import httpx
 from httpx import AsyncClient, HTTPStatusError, RequestError
 from contextlib import asynccontextmanager
 import uvicorn
+import socket
+from urllib.parse import urlparse
 
 # Configure logging
 if not os.path.exists('logs'):
@@ -33,13 +35,38 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 uvicorn_logger.addHandler(handler)
 
+# DNS cache for hostname to IP resolution
+dns_cache = {}
+
+def resolve_hostname_to_ip(url: str) -> str:
+    """Resolve hostname in URL to IP address, cache the result"""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    
+    if hostname in dns_cache:
+        logger.debug(f"DNS cache hit for {hostname} -> {dns_cache[hostname]}")
+        return url.replace(hostname, dns_cache[hostname])
+    
+    try:
+        # Resolve hostname to IP
+        ip_address = socket.gethostbyname(hostname)
+        dns_cache[hostname] = ip_address
+        logger.info(f"DNS resolved {hostname} -> {ip_address}")
+        return url.replace(hostname, ip_address)
+    except socket.gaierror as e:
+        logger.warning(f"DNS resolution failed for {hostname}: {e}. Using original URL.")
+        return url
+
 # Initialize async HTTP client
 httpclient:AsyncClient = None
+resolved_target_url = ""
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global httpclient
-    # Startup: Create a single persistent HTTP client for better performance
+    global httpclient, resolved_target_url
+    # Startup: Resolve DNS and create a single persistent HTTP client
+    resolved_target_url = resolve_hostname_to_ip(TARGET_URL)
+    
     httpclient = httpx.AsyncClient(
         http2=True,
         timeout=httpx.Timeout(60.0),  # 60 second timeout
@@ -49,7 +76,7 @@ async def lifespan(app: FastAPI):
             keepalive_expiry=30.0
         )
     )
-    logger.info("HTTP client initialized")
+    logger.info(f"HTTP client initialized with resolved URL: {resolved_target_url}")
     yield
     # Shutdown: Close the HTTP client
     if httpclient:
@@ -73,7 +100,7 @@ class Message(BaseModel):
 async def on_message(json_object, request_id) -> Tuple[bool, str]:
     try:
         headers = {"Request-Id": f"{request_id}"}
-        response = await httpclient.post(TARGET_URL, headers=headers, json=json_object)
+        response = await httpclient.post(resolved_target_url, headers=headers, json=json_object)
         logger.debug(f"[{request_id}] Response: %s", response.status_code)
         logger.debug(f"[{request_id}] HTTP version: %s", response.http_version)
         response.raise_for_status()
@@ -83,11 +110,11 @@ async def on_message(json_object, request_id) -> Tuple[bool, str]:
         logger.error(error_msg)
         return False, error_msg
     except RequestError as e:
-        error_msg = f"[{request_id}] Failed to forward message to HTTP endpoint: {e}"
+        error_msg = f"[{request_id}] Failed to forward message to HTTP endpoint: {type(e).__name__}: {str(e) or repr(e)}"
         logger.error(error_msg)
         return False, error_msg
     except Exception as e:
-        error_msg = f"[{request_id}] Unexpected error while processing message: {e}"
+        error_msg = f"[{request_id}] Unexpected error while processing message: {type(e).__name__}: {str(e) or repr(e)}"
         logger.error(error_msg)
         return False, error_msg
 
@@ -102,7 +129,7 @@ async def receive_message(message: Message, request_id: Optional[str] = Header(d
             message_dict["request_id"] = request_id
         message_str = json.dumps(message_dict)
        
-        logger.info(f"[{request_id}] Forwarding message {message_str} to {TARGET_URL} ...")
+        logger.info(f"[{request_id}] Forwarding message {message_str} to {resolved_target_url} ...")
         # Forward to Legacy System
         success, error = await on_message(message_str, request_id)
         

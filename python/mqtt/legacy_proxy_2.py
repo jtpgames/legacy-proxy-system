@@ -12,6 +12,8 @@ import requests
 from logging.handlers import RotatingFileHandler
 from requests.exceptions import RequestException
 import time
+import socket
+from urllib.parse import urlparse
 
 # Configure logging
 if not os.path.exists('logs'):
@@ -39,6 +41,31 @@ MQTT_RETRY_TOPIC_PUB = f'{SERVICE_NAME}/retry/message'
 MQTT_RETRY_TOPIC_SUB = '$share/legacy_proxy/+/retry/message'
 MQTT_QOS = int(os.getenv('MQTT_QOS', '2'))  # QoS level 2 by default
 TARGET_URL = os.getenv('TARGET_URL', 'http://localhost:8080/ID_REQ_KC_STORE7D3BPACKET')
+
+# DNS cache for hostname to IP resolution
+dns_cache = {}
+
+def resolve_hostname_to_ip(url: str) -> str:
+    """Resolve hostname in URL to IP address, cache the result"""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    
+    if hostname in dns_cache:
+        logger.debug(f"DNS cache hit for {hostname} -> {dns_cache[hostname]}")
+        return url.replace(hostname, dns_cache[hostname])
+    
+    try:
+        # Resolve hostname to IP
+        ip_address = socket.gethostbyname(hostname)
+        dns_cache[hostname] = ip_address
+        logger.info(f"DNS resolved {hostname} -> {ip_address}")
+        return url.replace(hostname, ip_address)
+    except socket.gaierror as e:
+        logger.warning(f"DNS resolution failed for {hostname}: {e}. Using original URL.")
+        return url
+
+# Resolve target URL at startup
+resolved_target_url = resolve_hostname_to_ip(TARGET_URL)
 
 class MQTTToHTTPForwarder:
     def __init__(self):
@@ -76,9 +103,9 @@ class MQTTToHTTPForwarder:
             logger.info(f"[{request_id}] Received message {msg.mid} on topic {msg.topic} (QoS {msg.qos}, DUP {msg.dup}): {payload}")
 
             headers = {"Request-Id": f"{request_id}"}
-            response = requests.post(TARGET_URL, headers=headers, json=json_payload)
+            response = requests.post(resolved_target_url, headers=headers, json=json_payload)
             response.raise_for_status()
-            logger.info(f"[{request_id}] Successfully forwarded message to {TARGET_URL}")
+            logger.info(f"[{request_id}] Successfully forwarded message to {resolved_target_url}")
             
             if self.is_in_retry_mode:
                 # self.client.subscribe(MQTT_TOPIC, qos=MQTT_QOS)

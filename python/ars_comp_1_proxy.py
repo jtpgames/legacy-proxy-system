@@ -15,6 +15,8 @@ import httpx
 from httpx import AsyncClient, HTTPStatusError, RequestError
 import uvicorn
 from uvicorn.protocols.http.h11_impl import H11Protocol
+import socket
+from urllib.parse import urlparse
 
 # Configure logging
 if not os.path.exists('logs'):
@@ -40,13 +42,38 @@ uvicorn_logger.addHandler(handler)
 
 TARGET_URL = os.getenv('TARGET_URL', 'http://localhost:8080/ID_REQ_KC_STORE7D3BPACKET')
 
+# DNS cache for hostname to IP resolution
+dns_cache = {}
+
+def resolve_hostname_to_ip(url: str) -> str:
+    """Resolve hostname in URL to IP address, cache the result"""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    
+    if hostname in dns_cache:
+        logger.debug(f"DNS cache hit for {hostname} -> {dns_cache[hostname]}")
+        return url.replace(hostname, dns_cache[hostname])
+    
+    try:
+        # Resolve hostname to IP
+        ip_address = socket.gethostbyname(hostname)
+        dns_cache[hostname] = ip_address
+        logger.info(f"DNS resolved {hostname} -> {ip_address}")
+        return url.replace(hostname, ip_address)
+    except socket.gaierror as e:
+        logger.warning(f"DNS resolution failed for {hostname}: {e}. Using original URL.")
+        return url
+
 # Initialize async HTTP client
 httpclient:AsyncClient = None
+resolved_target_url = ""
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global httpclient
-    # Startup: Create a single persistent HTTP client for better performance
+    global httpclient, resolved_target_url
+    # Startup: Resolve DNS and create a single persistent HTTP client
+    resolved_target_url = resolve_hostname_to_ip(TARGET_URL)
+    
     httpclient = httpx.AsyncClient(
         http2=True,
         timeout=httpx.Timeout(60.0),  # 60 second timeout
@@ -56,7 +83,7 @@ async def lifespan(app: FastAPI):
             keepalive_expiry=30.0
         )
     )
-    logger.info("HTTP client initialized")
+    logger.info(f"HTTP client initialized with resolved URL: {resolved_target_url}")
     yield
     # Shutdown: Close the HTTP client
     if httpclient:
@@ -112,7 +139,7 @@ async def on_message(json_object, request_id) -> Tuple[bool, str]:
     try:
         headers = {"Request-Id": f"{request_id}"}
 
-        response = await httpclient.post(TARGET_URL, headers=headers, json=json_object)
+        response = await httpclient.post(resolved_target_url, headers=headers, json=json_object)
         logger.debug(f"[{request_id}] Response: %s", response.status_code)
         logger.debug(f"[{request_id}] HTTP version: %s", response.http_version)
         response.raise_for_status()
@@ -121,10 +148,13 @@ async def on_message(json_object, request_id) -> Tuple[bool, str]:
         error_msg = f"[{request_id}] HTTP error {e.response.status_code}: {e.response.text}"
         return False, error_msg
     except RequestError as e:
-        error_msg = f"[{request_id}] Failed to send message to legacy proxy: {e}"
+        # Check if it's a timeout error specifically
+        if 'timeout' in str(e).lower() or 'timed out' in str(e).lower():
+            error_msg = f"[{request_id}] TIMEOUT sending to legacy proxy: {type(e).__name__}: {str(e) or repr(e)}"
+        else:
+            error_msg = f"[{request_id}] Failed to send message to legacy proxy: {type(e).__name__}: {str(e) or repr(e)}"
         return False, error_msg
-    except Exception as e:
-        error_msg = f"[{request_id}] Unexpected error while processing message: {e}"
+        error_msg = f"[{request_id}] Unexpected error while processing message: {type(e).__name__}: {str(e) or repr(e)}"
         return False, error_msg
 
 
@@ -166,7 +196,7 @@ async def receive_simple_call(
             'body': message_str
         }
 
-        logger.info(f"[{request_id}] Sending message {message_str} to {TARGET_URL} ...")
+        logger.info(f"[{request_id}] Sending message {message_str} to {resolved_target_url} ...")
 
         # Send to Legacy Proxy
         success, error = await on_message(json_msg, request_id)
