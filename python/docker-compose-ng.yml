@@ -6,6 +6,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_1_proxy.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     ports:
       - "7081:8080"
     environment:
@@ -30,6 +35,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_1_proxy.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     ports:
       - "7082:8080"
     environment:
@@ -54,6 +64,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_1_proxy.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     ports:
       - "7083:8080"
     environment:
@@ -78,6 +93,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_1.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     ports:
       - "8081:8080"
     environment:
@@ -107,6 +127,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_1.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     ports:
       - "8082:8080"
     environment:
@@ -136,6 +161,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_1.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     ports:
       - "8083:8080"
     environment:
@@ -165,6 +195,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_2.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     environment:
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
@@ -189,6 +224,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_2.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     environment:
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
@@ -213,6 +253,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_2.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     environment:
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
@@ -237,6 +282,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_2_proxy.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     ports:
       - "9081:8080"
     environment:
@@ -264,6 +314,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_2_proxy.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     ports:
       - "9082:8080"
     environment:
@@ -291,6 +346,11 @@ services:
     command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_2_proxy.py"
     cap_add:
       - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
     ports:
       - "9083:8080"
     environment:
