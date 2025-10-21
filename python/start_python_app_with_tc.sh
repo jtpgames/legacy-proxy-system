@@ -11,6 +11,14 @@ if [ ! -f "$1" ]; then
   exit 1
 fi
 
+# Default: don't use Granian
+USE_GRANIAN=false
+
+# Check for the optional flag
+if [ "$2" == "--use-granian" ]; then
+  USE_GRANIAN=true
+fi
+
 apt-get update && apt-get install -y iproute2 netcat-openbsd bc
 tc -V
 
@@ -72,10 +80,10 @@ pip install --root-user-action=ignore -r requirements.txt
 
 # Limit all incoming and outgoing network
 # Simulate ADSL link
-tc qdisc add dev eth0 ingress
-
-echo "Set up ingress policing (incoming traffic limit) with rate ${download_rate_mbit}mbit burst ${download_burst}k"
-tc filter add dev eth0 parent ffff: protocol ip prio 50 u32 match ip src 0.0.0.0/0 police rate "${download_rate_mbit}mbit" burst "${download_burst}k" drop flowid :1
+# tc qdisc add dev eth0 ingress
+#
+# echo "Set up ingress policing (incoming traffic limit) with rate ${download_rate_mbit}mbit burst ${download_burst}k"
+# tc filter add dev eth0 parent ffff: protocol ip prio 50 u32 match ip src 0.0.0.0/0 police rate "${download_rate_mbit}mbit" burst "${download_burst}k" drop flowid :1
 
 echo "Apply TBF for uplink/egress shaping (limited upload/outgoing rate) with rate ${upload_bandwidth}mbit burst ${upload_burst}k latency ${latency_ms}ms"
 tc qdisc add dev eth0 root handle 1: tbf rate "${upload_bandwidth}mbit" burst "${upload_burst}k" latency "${latency_ms}ms"
@@ -110,4 +118,21 @@ fi
 # self.addLink(ispAPSwitch, self.apSwitch, **linkopts)
 
 
-python "$1"
+if $USE_GRANIAN; then
+  echo "Running with Granian..."
+  pip install --root-user-action=ignore granian
+  # Extract the base filename without directory or .py extension
+  SCRIPT_NAME=$(basename "$1" .py)
+
+  # Read environment variables with defaults
+  HOST="${HTTP_HOST:-0.0.0.0}"
+  PORT="${HTTP_PORT:-8080}"
+
+  echo "granian --interface asgi --host \"$HOST\" --port \"$PORT\" \"${SCRIPT_NAME}:app\""
+
+  granian --interface asgi --host "$HOST" --port "$PORT" "${SCRIPT_NAME}:app"
+else
+  echo "Running univorn..."
+  python "$1"
+fi
+
