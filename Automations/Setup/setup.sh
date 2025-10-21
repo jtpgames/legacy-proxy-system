@@ -59,8 +59,6 @@ echo "All Python virtual environments created and requirements installed."
 echo "Building Docker image for locust_scripts"
 docker buildx build -t locust_scripts_runner:latest -f Automations/locust_scripts_runner_dockerfile .
 
-exit 1
-
 cd Automations
 
 # build simulator
