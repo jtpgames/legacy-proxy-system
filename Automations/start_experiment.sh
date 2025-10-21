@@ -3,6 +3,13 @@
 set -e
 set -o pipefail
 
+# forces programs to use the POSIX “C” locale, which defines the numeric format as:
+# Decimal point: .
+# No thousands separator
+# No grouping
+# This is important for awk and possibly other tools to use the same numeric format regardless of system locale
+export LC_NUMERIC=C
+
 function activate_venv_in_current_dir {
   # Check if the "venv" folder exists
   if [ ! -d "venv" ]; then
@@ -403,7 +410,8 @@ validate_equal_number_of_requests_send_and_received() {
 
     files=(LoadTester_Logs/worker_*.log)
     if (( ${#files[@]} > 0 )); then
-      count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' "${files[@]}" | sort -u | tee request_ids.txt | wc -l)
+      # here, we look for sends to all servers because we randomly send in the performance experiment
+      count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*708*/' "${files[@]}" | sort -u | tee request_ids.txt | wc -l)
     fi
 
     # Restore original nullglob state
@@ -1051,15 +1059,18 @@ echo "Waiting 2 seconds so that the prod workload warms up the JVM-based ARS com
 sleep 2 # for performance test make this longer to properly warm up?
 
 echo "Launching Alarm Device workload to the first ARS component"
+unset USE_RANDOM_ENDPOINT
 if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
   cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload_2.py -u http://host.docker.internal:7081,http://host.docker.internal:7082,http://host.docker.internal:7083 -m 1'
 else
+  USE_RANDOM_ENDPOINT=true
   cmd_ad_workload='python locust-parameter-variation.py locust/gen_gs_alarm_device_workload_2.py -u http://host.docker.internal:7081,http://host.docker.internal:7082,http://host.docker.internal:7083 -m 250 -p'
 fi
 
 docker run -d \
   --name ad_workload_container \
   $ADD_HOST_FLAG \
+  ${USE_RANDOM_ENDPOINT:+-e USE_RANDOM_ENDPOINT=$USE_RANDOM_ENDPOINT} \
   -v "$LOCUST_SCRIPTS_DIR/locust_logs/ad_workload:/logs" \
   -v /etc/localtime:/etc/localtime:ro \
   locust_scripts_runner:latest \
