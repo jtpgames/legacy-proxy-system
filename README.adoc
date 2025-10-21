@@ -82,6 +82,171 @@ sudo groupadd docker
 sudo usermod -aG docker $USER
 ----
 
+== Troubleshooting
+
+=== Network Delays Between Load Tester and Proxy Services
+
+==== Problem Description
+
+During load testing, intermittent delays of approximately 15 seconds were observed between the load tester sending requests and the first proxy service (ars-comp-1) receiving them. While the proxy services themselves processed requests efficiently (typically 40-50ms), these network-layer delays significantly impacted overall response times.
+
+==== Analysis Process
+
+1. **Request Tracing**: By analyzing load tester logs and proxy logs with matching request IDs, we confirmed that:
+   - Load tester sends request at timestamp A
+   - Proxy receives same request at timestamp A + 15 seconds
+   - Proxy processes request normally in ~40ms
+
+2. **Infrastructure Investigation**: Initial suspicions focused on:
+   - Podman user-mode networking performance on macOS
+   - FastAPI/Uvicorn configuration issues
+   - Container resource limitations
+
+3. **Root Cause Discovery**: The issue was traced to TCP listen queue overflow behavior:
+   - System setting `net.ipv4.tcp_abort_on_overflow = 0` causes silent packet drops
+   - When the listen queue is full, SYN packets are dropped rather than rejected
+   - Clients experience exponential backoff delays (3s, 6s, 12s...) waiting for retransmission
+
+==== Solution
+
+Modify the TCP behavior in the Podman machine to immediately reject connections when the listen queue is full, rather than causing delays:
+
+[source,bash]
+----
+# Temporary fix (active until VM restart)
+podman machine ssh sudo sysctl -w net.ipv4.tcp_abort_on_overflow=1
+
+# Permanent fix (persists across reboots)
+podman machine ssh "echo 'net.ipv4.tcp_abort_on_overflow = 1' | sudo tee -a /etc/sysctl.conf"
+
+# Verify the change
+podman machine ssh sysctl net.ipv4.tcp_abort_on_overflow
+----
+
+==== Additional TCP Optimizations
+
+For improved performance under high connection loads, apply these additional TCP optimizations:
+
+[source,bash]
+----
+# Apply optimizations immediately
+podman machine ssh "sudo sysctl -w net.core.netdev_max_backlog=2000"
+podman machine ssh "sudo sysctl -w net.ipv4.tcp_max_syn_backlog=2048"
+podman machine ssh "sudo sysctl -w net.ipv4.tcp_fin_timeout=30"
+podman machine ssh "sudo sysctl -w net.ipv4.ip_local_port_range='1024 61000'"
+
+# Make settings persistent across reboots
+podman machine ssh "echo 'net.core.netdev_max_backlog = 2000' | sudo tee -a /etc/sysctl.conf"
+podman machine ssh "echo 'net.ipv4.tcp_max_syn_backlog = 2048' | sudo tee -a /etc/sysctl.conf"
+podman machine ssh "echo 'net.ipv4.tcp_fin_timeout = 30' | sudo tee -a /etc/sysctl.conf"
+podman machine ssh "echo 'net.ipv4.ip_local_port_range = 1024 61000' | sudo tee -a /etc/sysctl.conf"
+----
+
+**Settings Explanation:**
+
+* `net.core.netdev_max_backlog = 2000`: Increases network device packet queue size (default: 1000)
+* `net.ipv4.tcp_max_syn_backlog = 2048`: Expands SYN packet backlog (default: 256)
+* `net.ipv4.tcp_fin_timeout = 30`: Reduces connection cleanup time (default: 60 seconds)
+* `net.ipv4.ip_local_port_range = 1024 61000`: Expands available port range for outbound connections
+
+==== Docker Implementation
+
+The TCP optimizations must also be applied at the container level, as Docker/Podman containers use separate network namespaces that do not inherit host-level sysctl settings. Both `docker-compose-legacy.yml` and `docker-compose-ng.yml` have been configured with container-level TCP optimizations.
+
+**Container-Level Settings:**
+
+All Python-based proxy containers now include the following sysctl configurations:
+
+[source,yaml]
+----
+sysctls:
+  - net.ipv4.tcp_max_syn_backlog=2048
+  - net.ipv4.tcp_fin_timeout=30
+  - net.ipv4.ip_local_port_range=1024 61000
+  - net.ipv4.tcp_abort_on_overflow=1
+----
+
+**Note:** The `net.core.netdev_max_backlog` setting cannot be applied at the container level as it requires host-level privileges. This optimization remains effective at the Podman machine level for host-to-container traffic.
+
+**Verification:**
+
+To verify that container-level TCP settings are applied correctly:
+
+[source,bash]
+----
+# Start a test container
+cd python && docker-compose -f docker-compose-legacy.yml up -d ars-comp-1-1
+
+# Check settings inside the container
+docker exec <container-id> cat /proc/sys/net/ipv4/tcp_max_syn_backlog
+docker exec <container-id> cat /proc/sys/net/ipv4/tcp_abort_on_overflow
+
+# Clean up
+docker-compose -f docker-compose-legacy.yml down
+----
+
+==== Fedora CoreOS Compatibility
+
+The Podman machine environment uses Fedora CoreOS, which provides several advantages for TCP performance optimization:
+
+**System Information:**
+- **OS**: Fedora CoreOS 40.20241019.3.0
+- **Kernel**: 6.11.3-200.fc40.aarch64
+- **Architecture**: Container-optimized minimal OS
+
+**Performance Benefits:**
+
+* **Modern TCP Stack**: Kernel 6.11.3 includes latest TCP improvements and RFC implementations
+* **Container-Optimized**: Designed specifically for containerized workloads with tuned networking defaults
+* **Minimal Overhead**: Reduced background processes compared to desktop distributions
+* **Immutable Design**: Persistent sysctl configurations survive reboots reliably
+
+**Network Stack Features:**
+
+[source,bash]
+----
+# Current congestion control (can be optimized further)
+podman machine ssh "sysctl net.ipv4.tcp_congestion_control"
+# Output: net.ipv4.tcp_congestion_control = cubic
+
+# Kernel version verification
+podman machine ssh "uname -r"
+# Output: 6.11.3-200.fc40.aarch64
+----
+
+**Note**: The modern kernel and container-focused design of Fedora CoreOS provides an ideal foundation for the TCP optimizations implemented in this project. All host-level and container-level settings are fully compatible and effective.
+
+**References:**
+
+_Note: The following references were AI-generated and have not been fully reviewed for accuracy._
+
+* Fedora CoreOS Documentation: https://docs.fedoraproject.org/en-US/fedora-coreos/[Official Fedora CoreOS Guide]
+* Container optimization design: https://github.com/coreos/fedora-coreos-docs[Fedora CoreOS Architecture]
+* Linux kernel 6.11 TCP improvements: https://kernelnewbies.org/Linux_6.11[Linux 6.11 Release Notes]
+* Immutable OS benefits: https://ostree.readthedocs.io/[OSTree Documentation]
+
+==== Alternative Solutions
+
+If connection errors occur after the above change, consider increasing the application-level backlog:
+
+[source,python]
+----
+# In FastAPI/Uvicorn applications
+uvicorn.run(app, host=host, port=port, backlog=8192, ...)
+----
+
+==== References
+
+_Note: The following references were AI-generated and have not been fully reviewed for accuracy._
+
+* Linux TCP implementation: https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt[tcp_abort_on_overflow documentation]
+* TCP listen queue behavior: Stevens, W. Richard. "TCP/IP Illustrated, Volume 1: The Protocols." Addison-Wesley, 2011.
+* Uvicorn configuration: https://www.uvicorn.org/settings/#socket-bind[Uvicorn Settings Documentation]
+* TCP optimization for high-performance servers: https://www.digitalocean.com/community/questions/max-number-of-concurrent-tcp-connections-to-droplet[DigitalOcean TCP Connection Limits]
+* Linux network performance tuning: https://fasterdata.es.net/host-tuning/linux/[ESnet Linux Tuning Guide]
+* TCP parameter tuning: Carder, Bradley. "Linux Network Performance Tuning." Linux Journal, 2016.
+* High-performance networking: https://blog.packagecloud.io/monitoring-tuning-linux-networking-stack-receiving-data/[Linux Networking Stack Tuning]
+
 == Usage
 
 == Cloning
@@ -95,5 +260,14 @@ git clone https://github.com/jtpgames/legacy-proxy-pattern.git && cd legacy-prox
 == License
 
 This project is licensed under the BSD License - see the LICENSE file for details.
+
+== AI Disclosure
+
+This project utilized Warp AI (warp.dev) as an AI assistant in its development process. Specifically:
+
+* **Documentation**: Warp AI was used to help write and improve portions of this README.adoc file, including troubleshooting guides and technical explanations.
+* **Code Development**: Warp AI served as a coding assistant for developing and debugging bash and Python scripts.
+
+While AI tools provided valuable assistance, all code and documentation have been reviewed, tested, and validated by the author. The final implementation decisions, architectural choices, and experimental design originate from the author.
 
 
