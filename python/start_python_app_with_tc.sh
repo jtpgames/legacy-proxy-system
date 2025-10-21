@@ -16,10 +16,23 @@ tc -V
 
 # Defaults
 download_rate_mbit="2"  # in mbit
-latency_ms=100          # e.g., 100 for 100ms
+latency_ms=10          # e.g., 100 for 100ms
 upload_bandwidth="1"    # in mbit
 egress_delay="40ms"
 egress_jitter="10ms"
+
+# Corporate WAN / MPLS (moderate latency, stable) according to ChatGPT 5
+
+download_rate_mbit="100"
+# upload_bandwidth="100" # (often symmetric)
+# upload_bandwidth="50" # GS Corporate LAN
+upload_bandwidth="5" # Customer LAN
+latency_ms=30
+egress_delay="30ms"
+egress_jitter="3ms"
+loss="0.01%"
+
+# TODO: linkopts = {'bw': 50, 'delay': '7.97ms', 'jitter': '2.9ms'}
 
 # Calculate burst = (rate in bits per second * latency in seconds) / 8
 rate_bit=$((download_rate_mbit * 1000 * 1000))
@@ -57,7 +70,7 @@ echo "After: $(ulimit -n)"
 # Install Python dependencies
 pip install --root-user-action=ignore -r requirements.txt
 
-# Limit all incoming and outgoing network to 1mbit/s
+# Limit all incoming and outgoing network
 # Simulate ADSL link
 tc qdisc add dev eth0 ingress
 
@@ -70,8 +83,9 @@ tc qdisc add dev eth0 root handle 1: tbf rate "${upload_bandwidth}mbit" burst "$
 # netem only works on linux host (not VM on MacOS)
 if [[ "$HOST_OS" == "linux" ]]; then
   echo "Linux host detected."
-  echo "Add netem to simulate latency and jitter with delay $egress_delay $egress_jitter distribution normal"
-  tc qdisc add dev eth0 parent 1:1 handle 10: netem delay $egress_delay $egress_jitter distribution normal
+  echo "Add netem to simulate latency and jitter with delay $egress_delay $egress_jitter distribution normal loss $loss 25% (Gilbert-Elliot loss models)"
+  # tc qdisc add dev eth0 parent 1:1 handle 10: netem delay $egress_delay $egress_jitter distribution normal
+  tc qdisc add dev eth0 parent 1:1 handle 10: netem delay $egress_delay $egress_jitter distribution normal loss $loss 25%
 else
   echo "Non-Linux host detected."
 fi
