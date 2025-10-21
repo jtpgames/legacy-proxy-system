@@ -127,10 +127,16 @@ if $USE_GRANIAN; then
   # Read environment variables with defaults
   HOST="${HTTP_HOST:-0.0.0.0}"
   PORT="${HTTP_PORT:-8080}"
+  
+  # Determine if HTTP/2 should be used
+  HTTP_FLAG=""
+  if [[ "${USE_HTTP_2,,}" == "true" || "${USE_HTTP_2}" == "1" || "${USE_HTTP_2,,}" == "yes" ]]; then
+    HTTP_FLAG="--http 2"
+  fi
 
-  echo "granian --interface asgi --host \"$HOST\" --port \"$PORT\" \"${SCRIPT_NAME}:app\""
+  echo "granian --interface asgi --host \"$HOST\" --port \"$PORT\" $HTTP_FLAG \"${SCRIPT_NAME}:app\""
 
-  granian --interface asgi --host "$HOST" --port "$PORT" "${SCRIPT_NAME}:app"
+  granian --interface asgi --host "$HOST" --port "$PORT" $HTTP_FLAG "${SCRIPT_NAME}:app"
 else
   echo "Running univorn..."
   python "$1"
