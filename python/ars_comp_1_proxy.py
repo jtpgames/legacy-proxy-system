@@ -14,9 +14,10 @@ from logging.handlers import RotatingFileHandler
 import httpx
 from httpx import AsyncClient, HTTPStatusError, RequestError
 import uvicorn
-from uvicorn.protocols.http.h11_impl import H11Protocol
 import socket
 from urllib.parse import urlparse
+import asyncio
+from threading import Lock
 
 # Configure logging
 if not os.path.exists('logs'):
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 uvicorn_logger = logging.getLogger("uvicorn")
-uvicorn_logger.setLevel(logging.INFO)
+uvicorn_logger.setLevel(logging.DEBUG)
 
 file_name = f'logs/{os.getenv("SERVICE_NAME", "ARS_Comp_1")}.log'
 handler = RotatingFileHandler(
@@ -68,6 +69,11 @@ def resolve_hostname_to_ip(url: str) -> str:
 httpclient:AsyncClient = None
 resolved_target_url = ""
 
+# Request rate tracking with sliding window
+from collections import deque
+request_timestamps = deque(maxlen=1000)  # Keep last 1000 request timestamps
+request_lock = Lock()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global httpclient, resolved_target_url
@@ -98,18 +104,33 @@ app = FastAPI(
 )
 
 
-class LoggingH11Protocol(H11Protocol):
-    def connection_made(self, transport):
-        peername = transport.get_extra_info("peername")
-        logger.debug(f"TCP connection from {peername}")
-        super().connection_made(transport)
+def get_connection_stats():
+    """Get current connection pool statistics from httpx client"""
+    if httpclient and hasattr(httpclient, '_transport'):
+        try:
+            # Try to get connection pool info from httpx transport
+            transport = httpclient._transport
+            if hasattr(transport, '_pool'):
+                pool = transport._pool
+                if hasattr(pool, '_connections'):
+                    return len(pool._connections)
+        except:
+            pass
+    return 0
 
-    def connection_lost(self, exc):
-        if exc:
-            logger.debug(f"TCP connection lost with error: {exc}")
-        else:
-            logger.debug("TCP connection closed gracefully")
-        super().connection_lost(exc)
+def calculate_rps(window_seconds=5):
+    """Calculate requests per second over the last window_seconds"""
+    current_time = time.time()
+    cutoff_time = current_time - window_seconds
+    
+    with request_lock:
+        # Remove timestamps older than the window
+        while request_timestamps and request_timestamps[0] < cutoff_time:
+            request_timestamps.popleft()
+        
+        # Calculate RPS
+        request_count = len(request_timestamps)
+        return round(request_count / window_seconds, 1)
 
 
 class SimpleCall(BaseModel):
@@ -176,6 +197,25 @@ async def on_message(json_object, request_id) -> Tuple[bool, str]:
 #     logger.info(f"{request.method} {request.url.path} -> {response.status_code} in {duration:.3f}s")
 #     return response
 
+@app.middleware("http")
+async def track_request_rate(request: Request, call_next):
+    start_time = time.time()
+    request_id = request.headers.get('request-id', 'unknown')
+    start_formatted = datetime.fromtimestamp(start_time).strftime('%H:%M:%S.%f')[:-3]
+    logger.debug(f"[MIDDLEWARE_START][{request_id}] Request received at {start_formatted}")
+    
+    # Record request timestamp
+    with request_lock:
+        request_timestamps.append(start_time)
+    
+    response = await call_next(request)
+    
+    end_time = time.time()
+    duration = end_time - start_time
+    logger.debug(f"[MIDDLEWARE_END][{request_id}] Request completed in {duration:.3f}s")
+    
+    return response
+
 
 @app.post("/api/v1/simple")
 async def receive_simple_call(
@@ -183,6 +223,10 @@ async def receive_simple_call(
     body_data: Optional[SimpleCall] = Body(None),
     request_id: Annotated[str | None, Header()] = None
 ):
+    endpoint_start = time.time()
+    endpoint_formatted = datetime.fromtimestamp(endpoint_start).strftime('%H:%M:%S.%f')[:-3]
+    logger.debug(f"[ENDPOINT_START][{request_id}] Handler started at {endpoint_formatted}")
+    
     try:
         data = query_data or body_data
         if not data:
@@ -196,7 +240,11 @@ async def receive_simple_call(
             'body': message_str
         }
 
-        logger.info(f"[{request_id}] Sending message {message_str} to {resolved_target_url} ...")
+        # Get current stats for enriched logging
+        current_rps = calculate_rps()
+        current_connections = get_connection_stats()
+        
+        logger.info(f"[rps:{current_rps}|conns:{current_connections}][{request_id}] Sending message {message_str} to {resolved_target_url} ...")
 
         # Send to Legacy Proxy
         success, error = await on_message(json_msg, request_id)
@@ -230,6 +278,5 @@ if __name__ == '__main__':
                 host=host, 
                 port=port, 
                 log_config=None, 
-                # http=LoggingH11Protocol, 
                 timeout_keep_alive=60)
 
