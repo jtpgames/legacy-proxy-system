@@ -1071,6 +1071,7 @@ docker run -d \
   --name ad_workload_container \
   $ADD_HOST_FLAG \
   ${USE_RANDOM_ENDPOINT:+-e USE_RANDOM_ENDPOINT=$USE_RANDOM_ENDPOINT} \
+  -e USE_HTTP_2=true \
   -v "$LOCUST_SCRIPTS_DIR/locust_logs/ad_workload:/logs" \
   -v /etc/localtime:/etc/localtime:ro \
   locust_scripts_runner:latest \
