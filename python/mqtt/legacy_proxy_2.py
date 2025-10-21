@@ -8,9 +8,9 @@ import paho.mqtt.client as mqtt
 from paho.mqtt.enums import MQTTProtocolVersion, MQTTErrorCode
 from paho.mqtt.properties import Properties
 from paho.mqtt.reasoncodes import ReasonCode
-import requests
+import httpx
+from httpx import HTTPStatusError, RequestError
 from logging.handlers import RotatingFileHandler
-from requests.exceptions import RequestException
 import time
 import socket
 from urllib.parse import urlparse
@@ -64,11 +64,31 @@ def resolve_hostname_to_ip(url: str) -> str:
         logger.warning(f"DNS resolution failed for {hostname}: {e}. Using original URL.")
         return url
 
-# Resolve target URL at startup
-resolved_target_url = resolve_hostname_to_ip(TARGET_URL)
+# HTTP client will be initialized in MQTTToHTTPForwarder
+httpclient: httpx.Client = None
+resolved_target_url = ""
 
 class MQTTToHTTPForwarder:
     def __init__(self):
+        global httpclient, resolved_target_url
+        
+        # Resolve DNS and create HTTP client
+        resolved_target_url = resolve_hostname_to_ip(TARGET_URL)
+        
+        use_http2 = os.getenv('USE_HTTP_2', '').lower() in ('1', 'true', 'yes')
+        
+        httpclient = httpx.Client(
+            http2=use_http2,  # use http2 here because ARS_Comp_2 use HTTP2.
+            http1=not use_http2,  # set to false to force http2 over plain text. Disabling http1 here, deactivates HTTP 1.1 Upgrade to HTTP 2.0
+            timeout=httpx.Timeout(60.0),  # 60 second timeout
+            limits=httpx.Limits(
+                max_keepalive_connections=100,
+                max_connections=None,  # No limit
+                keepalive_expiry=30.0
+            )
+        )
+        logger.info(f"HTTP client initialized with resolved URL: {resolved_target_url}, HTTP/2: {use_http2}")
+        
         self.client = mqtt.Client(
                 client_id=os.getenv("SERVICE_NAME", "legacy_proxy_2"), 
                 manual_ack=True,        # manually acknowledge successful message reception to allow rejecting a message in case of a downstream error.
@@ -103,7 +123,8 @@ class MQTTToHTTPForwarder:
             logger.info(f"[{request_id}] Received message {msg.mid} on topic {msg.topic} (QoS {msg.qos}, DUP {msg.dup}): {payload}")
 
             headers = {"Request-Id": f"{request_id}"}
-            response = requests.post(resolved_target_url, headers=headers, json=json_payload)
+            response = httpclient.post(resolved_target_url, headers=headers, json=json_payload)
+            logger.debug(f"[{request_id}] HTTP version: {response.http_version}")
             response.raise_for_status()
             logger.info(f"[{request_id}] Successfully forwarded message to {resolved_target_url}")
             
@@ -114,7 +135,7 @@ class MQTTToHTTPForwarder:
 
         except json.JSONDecodeError as e:
             logger.error(f"[{request_id}] Failed to decode message as JSON: {e}")
-        except RequestException as e:
+        except (HTTPStatusError, RequestError) as e:
             logger.error(f"[{request_id}] Failed to forward message to HTTP endpoint: {e}")
             message = msg.payload
             (rc, mid) = client.publish(
@@ -155,10 +176,14 @@ class MQTTToHTTPForwarder:
 
     def stop(self) -> None:
         """Stop the MQTT client and disconnect from the broker."""
+        global httpclient
         self.running = False
         self.client.loop_stop()
         self.client.disconnect()
         logger.info("MQTT client stopped")
+        if httpclient:
+            httpclient.close()
+            logger.info("HTTP client closed")
 
     def reconnect(self) -> None:
         """Stop (disconnect) and start (connect) the MQTT client."""
