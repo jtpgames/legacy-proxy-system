@@ -80,8 +80,12 @@ async def lifespan(app: FastAPI):
     # Startup: Resolve DNS and create a single persistent HTTP client
     resolved_target_url = resolve_hostname_to_ip(TARGET_URL)
     
+    # Use resolved URL only when running with uvicorn (HTTP/1.1), original URL otherwise (HTTP/2 with granian)
+    use_http2 = os.getenv('USE_HTTP_2', '').lower() in ('1', 'true', 'yes')
+    
     httpclient = httpx.AsyncClient(
-        http2=True,
+        http2=use_http2, # use http2 here because ARS_Comp_2 and LP1 use HTTP2.
+        http1=not use_http2, # set to false to force http2 over plain text. Disabling http1 here, deactivates HTTP 1.1 Upgrade to HTTP 2.0
         timeout=httpx.Timeout(60.0),  # 60 second timeout
         limits=httpx.Limits(
             max_keepalive_connections=100,

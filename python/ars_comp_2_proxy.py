@@ -68,7 +68,8 @@ async def lifespan(app: FastAPI):
     resolved_target_url = resolve_hostname_to_ip(TARGET_URL)
     
     httpclient = httpx.AsyncClient(
-        http2=True,
+        http2=False,
+        http1=True, # use http1.1 here because the RAST simulator uses HTTP 1.1
         timeout=httpx.Timeout(60.0),  # 60 second timeout
         limits=httpx.Limits(
             max_keepalive_connections=100,
