@@ -1,12 +1,13 @@
 from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel
-import paho.mqtt.publish as mqtt
+import aiomqtt
 import logging
 from logging.handlers import RotatingFileHandler
 import os
 import json
-from typing import Dict, Any, Tuple, Optional
+from typing import Tuple, Optional
 import uvicorn
+from contextlib import asynccontextmanager
 
 # Configure logging
 if not os.path.exists('logs'):
@@ -30,37 +31,74 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 uvicorn_logger.addHandler(handler)
 
-# Initialize FastAPI app
-app = FastAPI(title="Legacy Proxy I", description="HTTP to MQTT bridge service")
-
 # Get configuration from environment variables with defaults
 MQTT_BROKER = os.getenv('MQTT_BROKER', 'localhost')
-MQTT_PORT = os.getenv('MQTT_PORT', '1883')
+MQTT_PORT = int(os.getenv('MQTT_PORT', '1883'))
 MQTT_TOPIC = os.getenv('MQTT_TOPIC', 'default/topic')
+CLIENT_ID = os.getenv("SERVICE_NAME", "legacy_proxy_1")
+
+# Global MQTT client instance
+mqtt_client: Optional[aiomqtt.Client] = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage MQTT client lifecycle."""
+    global mqtt_client
+    
+    # Startup: Create persistent MQTT connection
+    logger.info(f"Connecting to MQTT broker at {MQTT_BROKER}:{MQTT_PORT} using MQTT5")
+    mqtt_client = aiomqtt.Client(
+        hostname=MQTT_BROKER,
+        port=MQTT_PORT,
+        identifier=CLIENT_ID,
+        clean_start=False,  # Persistent session for MQTT5
+        protocol=aiomqtt.ProtocolVersion.V5
+    )
+    
+    try:
+        await mqtt_client.__aenter__()
+        logger.info("Successfully connected to MQTT broker")
+        yield
+    finally:
+        # Shutdown: Close MQTT connection
+        if mqtt_client:
+            logger.info("Closing MQTT connection")
+            await mqtt_client.__aexit__(None, None, None)
+            mqtt_client = None
+
+# Initialize FastAPI app with lifespan
+app = FastAPI(
+    title="Legacy Proxy I",
+    description="HTTP to MQTT bridge service",
+    lifespan=lifespan
+)
 
 class Message(BaseModel):
     """Pydantic model for request validation"""
     id: str
     body: str
 
-def publish_to_mqtt(message: str) -> Tuple[bool, str]:
+async def publish_to_mqtt(message: str) -> Tuple[bool, str]:
     """
-    Publish a message to MQTT broker using paho-mqtt with QoS 2.
+    Asynchronously publish a message to MQTT broker with QoS 2.
     
     Returns:
         Tuple[bool, str]: Success status and error message if any
     """
+    if mqtt_client is None:
+        error_msg = "MQTT client not initialized"
+        logger.error(error_msg)
+        return False, error_msg
+    
     try:
-        mqtt.single(
-            client_id=os.getenv("SERVICE_NAME", "legacy_proxy_1"),
+        await mqtt_client.publish(
             topic=MQTT_TOPIC,
             payload=message,
             qos=2,
-            hostname=MQTT_BROKER,
-            port=int(MQTT_PORT)
+            retain=False
         )
         return True, ""
-    except mqtt.MQTTException as e:
+    except aiomqtt.MqttError as e:
         error_msg = f"MQTT Error: {str(e)}"
         logger.error(error_msg)
         return False, error_msg
@@ -81,7 +119,7 @@ async def receive_message(message: Message, request_id: Optional[str] = Header(d
        
         logger.info(f"[{request_id}] Publishing message {message_str} to Broker ...")
         # Publish to MQTT
-        success, error = publish_to_mqtt(message_str)
+        success, error = await publish_to_mqtt(message_str)
         
         if not success:
             logger.error(f"[{request_id}] MQTT publish failed: {error}")
