@@ -249,6 +249,124 @@ _Note: The following references were AI-generated and have not been fully review
 
 == Usage
 
+=== HTTP/2 Support with Granian
+
+The proxy services in this project support HTTP/2 cleartext (h2c) connections through Granian, which provides performance benefits over HTTP/1.1 including request multiplexing and header compression.
+
+==== Running Services with HTTP/2
+
+The Docker Compose configurations (`docker-compose-legacy.yml` and `docker-compose-ng.yml`) already use the `start_python_app_with_tc.sh` script with the `--use-granian` flag to run all proxy services with HTTP/2 support:
+
+[source,yaml]
+----
+# Services in docker-compose files use this format:
+command: ./start_python_app_with_tc.sh ars_comp_1_proxy.py --use-granian
+----
+
+When you run the Docker Compose setup, all proxy services automatically start with Granian using HTTP/2 instead of the default Uvicorn with HTTP/1.1. The `--http 2` flag is automatically passed to Granian in the script.
+
+To manually run a service with HTTP/2 support outside of Docker Compose:
+
+[source,bash]
+----
+# Run a proxy service with HTTP/2 support using Granian
+./start_python_app_with_tc.sh ars_comp_1_proxy.py --use-granian
+----
+
+==== Client-Side HTTP/2 Configuration
+
+When httpx clients communicate with HTTP/2 services, they must be configured to use HTTP/2 exclusively. This is achieved by setting both `http2=True` and `http1=False` parameters when constructing the client:
+
+[source,python]
+----
+import httpx
+
+# For synchronous clients
+client = httpx.Client(http2=True, http1=False)
+
+# For asynchronous clients
+async_client = httpx.AsyncClient(http2=True, http1=False)
+----
+
+**Important**: Without the `http1=False` parameter, httpx may attempt HTTP/1.1 negotiation, which can result in protocol errors like "illegal request line" when communicating with HTTP/2 services.
+
+==== USE_HTTP_2 Environment Variable
+
+The httpx clients in proxy services can be configured to use HTTP/2 via the `USE_HTTP_2` environment variable. This provides fine-grained control over which client connections use HTTP/2:
+
+[source,yaml]
+----
+# In docker-compose files
+environment:
+  - USE_HTTP_2=true  # Enable HTTP/2 for httpx client
+----
+
+When `USE_HTTP_2` is set to `true`, `1`, or `yes`, the httpx client will be configured with:
+* `http2=True` - Enable HTTP/2 protocol
+* `http1=False` - Disable HTTP/1.1 to force HTTP/2 cleartext (h2c)
+
+This setting controls the **client-side** HTTP protocol used for outbound requests, independent of how the service itself accepts incoming connections (which is controlled by the `--use-granian` flag).
+
+==== Request Flow Diagrams
+
+**Baseline Architecture:**
+
+[source]
+----
+┌──────────────┐                 ┌─────────────────┐                 ┌─────────────────┐                 ┌──────────────┐
+│   Locust     │    HTTP/2 or    │  ars-comp-1     │    HTTP/2 or    │  ars-comp-2     │     HTTP/1.1    │     RAST     │
+│ Load Tester  │────HTTP/1.1────▶│  (ARS SRV 1)    │────HTTP/1.1────▶│  (ARS SRV 2)    │────(forced)────▶│  Simulator   │
+│              │  (USE_HTTP_2)   │                 │  (USE_HTTP_2)   │                 │                 │              │
+└──────────────┘                 └─────────────────┘                 └─────────────────┘                 └──────────────┘
+     │                                   │                                   │                                   │
+     │                                   │                                   │                                   │
+   Granian                            Granian                            Granian                               Ktor
+  (--use-granian)                    (--use-granian)                    (--use-granian)                       (HTTP/1.1)
+   HTTP/2 h2c                        HTTP/2 h2c                         HTTP/2 h2c                          
+   or Uvicorn                        or Uvicorn                         or Uvicorn                          
+   HTTP/1.1                          HTTP/1.1                           HTTP/1.1                            
+                                                                                                           
+   httpx Client                      httpx Client                      httpx Client                        
+   HTTP/2 or HTTP/1.1                HTTP/2 or HTTP/1.1                HTTP/1.1 (forced)                   
+   (USE_HTTP_2)                      (USE_HTTP_2)                      (ignores USE_HTTP_2)
+----
+
+**Refactored Architecture with LPS:**
+
+[source]
+----
+┌──────────────┐                 ┌─────────────────┐                 ┌─────────────────┐      ┌──────────┐      ┌─────────────────┐                 ┌─────────────────┐                 ┌──────────────┐
+│   Locust     │    HTTP/2 or    │  ars-comp-1     │    HTTP/2 or    │ legacy-proxy-1  │      │  MQTT    │      │ legacy-proxy-2  │    HTTP/2 or    │  ars-comp-2     │     HTTP/1.1    │     RAST     │
+│ Load Tester  │────HTTP/1.1────▶│  (ARS SRV 1)    │────HTTP/1.1────▶│  (HTTP→MQTT)    │─────▶│  Broker  │─────▶│  (MQTT→HTTP)    │────HTTP/1.1────▶│  (ARS SRV 2)    │────(forced)────▶│  Simulator   │
+│              │  (USE_HTTP_2)   │                 │  (USE_HTTP_2)   │                 │ QoS2 │ MQTTv5   │ QoS2 │                 │  (USE_HTTP_2)   │                 │                 │              │
+└──────────────┘                 └─────────────────┘                 └─────────────────┘      └──────────┘      └─────────────────┘                 └─────────────────┘                 └──────────────┘
+     │                                   │                                   │                                           │                                   │                                   │
+     │                                   │                                   │                                           │                                   │                                   │
+   Granian                            Granian                            Granian                                    No Server                          Granian                                 Ktor
+   (--use-granian)                   (--use-granian)                   (--use-granian)                             (MQTT Client)                      (--use-granian)                         (HTTP/1.1)
+   HTTP/2 h2c                        HTTP/2 h2c                        HTTP/2 h2c                                  aiomqtt                            HTTP/2 h2c                          
+   or Uvicorn                        or Uvicorn                        or Uvicorn                                  MQTTv5                             or Uvicorn                          
+   HTTP/1.1                          HTTP/1.1                          HTTP/1.1                                                                       HTTP/1.1                            
+                                                                                                                   httpx Client                                                            
+   httpx Client                      httpx Client                      aiomqtt                                     HTTP/2 or HTTP/1.1                 httpx Client                        
+   HTTP/2 or HTTP/1.1                HTTP/2 or HTTP/1.1                MQTTv5                                      (USE_HTTP_2)                       HTTP/1.1 (forced)                   
+   (USE_HTTP_2)                      (USE_HTTP_2)                      (publishes to MQTT)                                                            (ignores USE_HTTP_2)
+----
+
+**Protocol Notes:**
+
+* **Server-side protocol** (incoming): Controlled by `--use-granian` flag (HTTP/2) or default Uvicorn (HTTP/1.1)
+* **Client-side protocol** (outgoing): Controlled by `USE_HTTP_2` environment variable in httpx clients
+* **ars-comp-2 exception**: Always uses HTTP/1.1 for RAST communication regardless of `USE_HTTP_2` setting
+* **MQTT Bridge**: legacy-proxy-2 is an MQTT subscriber that initiates HTTP requests (no incoming HTTP server)
+
+**Files Configured for HTTP/2:**
+
+* `python/ars_comp_1_proxy.py` - Uses HTTP/2 for downstream requests (configured via `USE_HTTP_2`)
+* `python/ars_comp_2_proxy.py` - **HTTP/2 DISABLED**: Uses HTTP/1.1 only for downstream requests to RAST simulator (hardcoded, does not respect `USE_HTTP_2`)
+* `python/mqtt/legacy_proxy_2.py` - Uses HTTP/2 for downstream requests (configured via `USE_HTTP_2`)
+* `locust_scripts/common/common_locust.py` - Load test client configured for HTTP/2 connections (configured via `USE_HTTP_2`)
+
 == Cloning
 If you want to work on the current version of the project, clone the repository and pull all git submodules with the following command. 
 
