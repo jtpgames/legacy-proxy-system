@@ -400,6 +400,7 @@ validate_equal_number_of_requests_send_and_received() {
   echo "Determining distinct request-ids..." | tee -a validate_equal_number_of_requests_send_and_received.log
 
   if [[ "$failover_or_performance_load" == "$failover_load_type" ]]; then
+    # Example: [2025-10-21 21:24:56,655] d0c925dc74e7/INFO/RepeatingClient: [213574268831903652950313345009142188478] (213574357567445668926371449778366564798) Sending to http://host.docker.internal:7081/api/v1/simple
     count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*7081/' LoadTester_Logs/locust_log_1.log | sort -u | tee request_ids.txt | wc -l)
   else
     # Save current nullglob state
@@ -410,8 +411,10 @@ validate_equal_number_of_requests_send_and_received() {
 
     files=(LoadTester_Logs/worker_*.log)
     if (( ${#files[@]} > 0 )); then
-      # here, we look for sends to all servers because we randomly send in the performance experiment
-      count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*708*/' "${files[@]}" | sort -u | tee request_ids.txt | wc -l)
+      # here, we look for sends to all servers because we randomly send in the performance experiment. 
+      # However, because we stop the load test, we typically have a lot of send requests that never reached the server because the load tester processes are killed. Maybe, it is a bug in locust. So here, we look for the requests where we received responses.
+      # Example: [2025-10-21 21:24:56,715] d0c925dc74e7/INFO/RepeatingClient: [213574268831903652950313345009142188478] (213574357567445668926371449778366564798) Response time 59 ms
+      count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*708./' "${files[@]}" | sort -u | tee request_ids.txt | wc -l)
     fi
 
     # Restore original nullglob state
@@ -1128,6 +1131,9 @@ else
     # Check if the last line contains the desired text
     if [[ "$last_line" == *"Finished performance test"* ]]; then
       echo $last_line
+      # here we need to wait for the ad_workload load tester to finish on its own before going into cleanup and hard stopping the containers.
+      echo "Waiting for 30 seconds for the load tester to stop on its own."
+      sleep 30
       break
     fi
 
