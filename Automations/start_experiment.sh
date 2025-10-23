@@ -1131,9 +1131,6 @@ else
     # Check if the last line contains the desired text
     if [[ "$last_line" == *"Finished performance test"* ]]; then
       echo $last_line
-      # here we need to wait for the ad_workload load tester to finish on its own before going into cleanup and hard stopping the containers.
-      echo "Waiting for 30 seconds for the load tester to stop on its own."
-      sleep 30
       break
     fi
 
