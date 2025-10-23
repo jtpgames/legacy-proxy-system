@@ -80,10 +80,10 @@ pip install --root-user-action=ignore -r requirements.txt
 
 # Limit all incoming and outgoing network
 # Simulate ADSL link
-# tc qdisc add dev eth0 ingress
-#
-# echo "Set up ingress policing (incoming traffic limit) with rate ${download_rate_mbit}mbit burst ${download_burst}k"
-# tc filter add dev eth0 parent ffff: protocol ip prio 50 u32 match ip src 0.0.0.0/0 police rate "${download_rate_mbit}mbit" burst "${download_burst}k" drop flowid :1
+tc qdisc add dev eth0 ingress
+
+echo "Set up ingress policing (incoming traffic limit) with rate ${download_rate_mbit}mbit burst ${download_burst}k"
+tc filter add dev eth0 parent ffff: protocol ip prio 50 u32 match ip src 0.0.0.0/0 police rate "${download_rate_mbit}mbit" burst "${download_burst}k" drop flowid :1
 
 echo "Apply TBF for uplink/egress shaping (limited upload/outgoing rate) with rate ${upload_bandwidth}mbit burst ${upload_burst}k latency ${latency_ms}ms"
 tc qdisc add dev eth0 root handle 1: tbf rate "${upload_bandwidth}mbit" burst "${upload_burst}k" latency "${latency_ms}ms"
