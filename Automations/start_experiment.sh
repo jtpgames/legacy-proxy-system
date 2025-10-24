@@ -411,10 +411,11 @@ validate_equal_number_of_requests_send_and_received() {
 
     files=(LoadTester_Logs/worker_*.log)
     if (( ${#files[@]} > 0 )); then
+      count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*708./' "${files[@]}" | sort -u | tee request_ids.txt | wc -l)
       # here, we look for sends to all servers because we randomly send in the performance experiment. 
       # However, because we stop the load test, we typically have a lot of send requests that never reached the server because the load tester processes are killed. Maybe, it is a bug in locust. So here, we look for the requests where we received responses.
       # Example: [2025-10-21 21:24:56,715] d0c925dc74e7/INFO/RepeatingClient: [213574268831903652950313345009142188478] (213574357567445668926371449778366564798) Response time 59 ms
-      count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sSending to.*708./' "${files[@]}" | sort -u | tee request_ids.txt | wc -l)
+      # count_request_ids_load_tester=$(perl -n -e 'print "$1\n" if /\((\d+)\)\sResponse time/' "${files[@]}" | sort -u | tee request_ids.txt | wc -l)
     fi
 
     # Restore original nullglob state
@@ -523,6 +524,12 @@ cleanup() {
     echo "Stopping load testers and waiting for an additional 10 seconds grace period"
     docker stop prod_workload_container ad_workload_container 2>/dev/null || true
     sleep 10
+
+    if [[ "$experiment_type" == "ng" ]]; then
+      echo "Waiting for another 2 minutes for the remaining messages in the broker to be consumed."
+      sleep 120
+    fi
+
     echo "Stopping all containers..."
     execute_docker_compose down --remove-orphans
 
