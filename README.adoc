@@ -247,6 +247,160 @@ _Note: The following references were AI-generated and have not been fully review
 * TCP parameter tuning: Carder, Bradley. "Linux Network Performance Tuning." Linux Journal, 2016.
 * High-performance networking: https://blog.packagecloud.io/monitoring-tuning-linux-networking-stack-receiving-data/[Linux Networking Stack Tuning]
 
+=== Temporary DNS Resolution Errors in Performance Tests
+
+==== Problem Description
+
+During high-volume performance testing with hundreds of concurrent HTTP requests, temporary DNS resolution failures occurred when Python HTTP clients (httpx, requests) attempted to resolve Docker service names. These errors manifested as:
+
+* **Error Type**: `socket.gaierror: [Errno -3] Temporary failure in name resolution`
+* **Affected Services**: Load testers (Locust), ars-comp-1 proxies, ars-comp-2 proxies, and legacy-proxy-2 (MQTT-to-HTTP bridge)
+* **Trigger**: High request rates (100+ RPS) with multiple concurrent connections to Docker service hostnames
+* **Impact**: Request failures, test instability, and unreliable performance measurements
+
+==== Root Cause Analysis
+
+**Docker Embedded DNS Server Limitations**
+
+Docker uses an embedded DNS server for container name resolution, typically running at `127.0.0.11:53` inside each container. Under high load conditions, this DNS resolver can become overwhelmed:
+
+* **Limited Connection Handling**: The embedded DNS server has finite connection and query processing capacity
+* **No Built-in Caching**: Each DNS query from the application layer results in a fresh lookup to the Docker DNS server
+* **UDP-Based Resolution**: Docker DNS uses UDP, which under high concurrency can lead to packet drops or delayed responses
+* **Shared Resource**: All containers on the same Docker network share the same DNS infrastructure
+
+**Performance Test Characteristics**
+
+Our experiments involve:
+
+* **Service Topology**: Multi-tier architecture with services like `ars-comp-1-{1,2,3}`, `ars-comp-2-{1,2,3}`, `proxy1-{1,2,3}`, `proxy2-{1,2,3}`, and `ars-comp-3`
+* **Request Volume**: Performance tests generate 100-500 requests per second
+* **Connection Pattern**: Each request may trigger DNS lookups for service names like `ars-comp-2-1`, `ars-comp-2-2`, `mosquitto`, etc.
+* **Concurrent Clients**: Multiple load testing workers and proxy instances making simultaneous requests
+
+When combining high request rates with frequent service name resolution, the embedded DNS server can exceed its capacity, resulting in temporary failures.
+
+==== Solution: Application-Level DNS Caching
+
+To mitigate these DNS resolution failures, we implemented a **local DNS cache** at the application level in each Python service. This approach resolves hostnames to IP addresses once and caches the results in memory, eliminating repeated queries to the Docker DNS server.
+
+**Implementation Details**
+
+**Cache Structure:**
+[source,python]
+----
+# DNS cache dictionary (hostname -> IP address)
+dns_cache = {}
+
+def resolve_hostname_to_ip(url: str) -> str:
+    """Resolve hostname in URL to IP address, cache the result"""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    
+    # Return original URL to disable caching (current configuration)
+    return url
+    
+    # Caching logic (activated by removing the early return above)
+    if hostname in dns_cache:
+        logger.debug(f"DNS cache hit for {hostname} -> {dns_cache[hostname]}")
+        return url.replace(hostname, dns_cache[hostname])
+    
+    try:
+        ip_address = socket.gethostbyname(hostname)
+        dns_cache[hostname] = ip_address
+        logger.info(f"DNS resolved {hostname} -> {ip_address}")
+        return url.replace(hostname, ip_address)
+    except socket.gaierror as e:
+        logger.warning(f"DNS resolution failed for {hostname}: {e}")
+        return url
+----
+
+**Services with DNS Caching:**
+
+* `locust_scripts/common/common_locust.py` - Load tester client (RepeatingHttpxClient)
+* `python/ars_comp_1_proxy.py` - ARS Component 1 proxy
+* `python/ars_comp_2_proxy.py` - ARS Component 2 proxy
+* `python/mqtt/legacy_proxy_2.py` - MQTT-to-HTTP bridge
+
+**Activation Mechanism:**
+
+The DNS cache is currently **disabled by default** via an early `return url` statement in the `resolve_hostname_to_ip()` function. To enable caching for performance tests, remove or comment out this early return statement in the relevant Python files.
+
+**Benefits:**
+
+* **Reduced DNS Load**: Eliminates repeated lookups for the same hostname
+* **Improved Reliability**: Prevents transient DNS failures under high load
+* **Lower Latency**: Avoids DNS query overhead for cached hostnames
+* **Consistent Performance**: Enables stable, repeatable performance test results
+
+==== Failover Experiment Considerations
+
+**DNS Cache Invalidation Issue**
+
+For **failover experiments**, the local DNS cache must be **disabled**. When Docker containers are stopped and restarted during failover testing:
+
+* **IP Address Changes**: Docker assigns a new IP address to the restarted container
+* **Stale Cache Entries**: The DNS cache still contains the old IP address
+* **Connection Failures**: Requests to cached IPs fail because the container is no longer reachable at that address
+
+**Current Configuration:**
+
+The DNS cache is disabled by default (via the early `return url` in `resolve_hostname_to_ip()`) to support failover experiments. This ensures that:
+
+* DNS resolution happens on every request
+* Container restarts with new IP addresses are handled correctly
+* Failover behavior is tested accurately
+
+**Recommended Approach:**
+
+For different experiment types, consider these configurations:
+
+|===
+|Experiment Type |DNS Cache Status |Rationale
+
+|Performance Tests
+|**Enabled**
+|Maximizes throughput and prevents DNS-related failures
+
+|Failover Tests
+|**Disabled** (default)
+|Ensures proper handling of container restarts with new IPs
+
+==== Docker Network DNS Architecture
+
+**Service Discovery Mechanism:**
+
+Docker Compose creates a default bridge network where each service is assigned:
+
+* **Hostname**: The service name from docker-compose.yml (e.g., `ars-comp-1-1`, `proxy1-2`, `mosquitto`)
+* **DNS Entry**: Automatically registered with the embedded DNS server at `127.0.0.11`
+* **Dynamic IP**: Assigned from the bridge network subnet (e.g., `172.18.0.5`)
+
+**Example Service Names from Our Configuration:**
+
+**Legacy Pattern** (`docker-compose-legacy.yml`):
+* `ars-comp-1-1`, `ars-comp-1-2`, `ars-comp-1-3` - Client-facing proxies
+* `ars-comp-2-1`, `ars-comp-2-2`, `ars-comp-2-3` - Direct HTTP forwarding proxies
+* `ars-comp-3` - RAST simulator
+
+**New Generation Pattern** (`docker-compose-ng.yml`):
+* `ars-comp-1-1`, `ars-comp-1-2`, `ars-comp-1-3` - Client-facing proxies
+* `proxy1-1`, `proxy1-2`, `proxy1-3` - HTTP-to-MQTT bridges
+* `proxy2-1`, `proxy2-2`, `proxy2-3` - MQTT-to-HTTP bridges
+* `mosquitto` - MQTT broker
+* `ars-comp-3` - RAST simulator
+
+==== References
+
+_Note: The following references were AI-generated and have not been fully reviewed for accuracy._
+
+* Docker Embedded DNS: https://docs.docker.com/config/containers/container-networking/#dns-services[Docker DNS Services Documentation]
+* Docker DNS Performance: https://github.com/moby/moby/issues/21424[Known DNS Resolution Issues Under Load]
+* Python DNS Resolution: https://docs.python.org/3/library/socket.html#socket.gethostbyname[socket.gethostbyname() Documentation]
+* DNS Caching Strategies: https://www.nginx.com/blog/dns-service-discovery-nginx-plus/[DNS Service Discovery and Caching Best Practices]
+* Container Networking Performance: https://netdevconf.info/2.2/papers/gasparini-paper.pdf[Linux Container Networking Performance Analysis]
+* Docker Network Architecture: https://success.docker.com/article/networking[Docker Reference Architecture: Networking]
+
 == Usage
 
 === HTTP/2 Support with Granian
