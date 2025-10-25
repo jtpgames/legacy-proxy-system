@@ -262,12 +262,12 @@ During high-volume performance testing with hundreds of concurrent HTTP requests
 
 **Docker Embedded DNS Server Limitations**
 
-Docker uses an embedded DNS server for container name resolution, typically running at `127.0.0.11:53` inside each container. Under high load conditions, this DNS resolver can become overwhelmed:
+Docker provides an *embedded DNS resolver* for containers on user-defined networks. Each container typically lists `127.0.0.11` as its nameserver, and the Docker engine forwards these queries to the host’s configured DNS servers. While this design simplifies service discovery, the embedded resolver introduces several operational constraints:
 
-* **Limited Connection Handling**: The embedded DNS server has finite connection and query processing capacity
-* **No Built-in Caching**: Each DNS query from the application layer results in a fresh lookup to the Docker DNS server
-* **UDP-Based Resolution**: Docker DNS uses UDP, which under high concurrency can lead to packet drops or delayed responses
-* **Shared Resource**: All containers on the same Docker network share the same DNS infrastructure
+* *Finite Processing Capacity* – The resolver is implemented within the Docker engine (via _libnetwork_) and therefore has limited throughput. Under very high query rates or concurrent workloads, users have reported timeouts and dropped queries due to resource contention.
+* *Limited Caching Behavior* – The resolver applies time-to-live (TTL) values to responses and caches entries for their duration, but it does not maintain an extensive cache across all lookups. This can result in repeated upstream queries and increased latency under load.
+* *UDP-Dominant Transport* – Most DNS traffic in Docker networks uses UDP on port 53. Although DNS can fall back to TCP for truncated or large responses, the embedded resolver has exhibited degraded performance or timeouts in such cases, especially under high concurrency.
+* *Shared Resource Model* – All containers attached to the same Docker network rely on the same embedded resolver instance on the host, making DNS resolution a centralized and potentially contended resource.
 
 **Performance Test Characteristics**
 
@@ -393,6 +393,12 @@ Docker Compose creates a default bridge network where each service is assigned:
 ==== References
 
 _Note: The following references were AI-generated and have not been fully reviewed for accuracy._
+
+* https://docs.docker.com/network/bridge/#configure-dns[Docker Docs – Container networking / DNS services]
+* https://github.com/moby/moby/issues/23430[Moby GitHub issue #23430]
+* https://github.com/moby/moby/issues/31208[Moby GitHub issue #31208]
+* https://github.com/moby/moby/issues/42680[Moby GitHub issue #42680]
+* Serverfault forum: https://serverfault.com/questions/784495/poor-performance-with-docker-internal-dns
 
 * Docker Embedded DNS: https://docs.docker.com/config/containers/container-networking/#dns-services[Docker DNS Services Documentation]
 * Docker DNS Performance: https://github.com/moby/moby/issues/21424[Known DNS Resolution Issues Under Load]
