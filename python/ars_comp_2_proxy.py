@@ -42,6 +42,10 @@ def resolve_hostname_to_ip(url: str) -> str:
     """Resolve hostname in URL to IP address, cache the result"""
     parsed = urlparse(url)
     hostname = parsed.hostname
+
+    # Skip DNS caching if environment variable is set
+    if os.getenv('SKIP_DNS_CACHE', '').lower() in ('1', 'true', 'yes'):
+        return url
     
     if hostname in dns_cache:
         logger.debug(f"DNS cache hit for {hostname} -> {dns_cache[hostname]}")
