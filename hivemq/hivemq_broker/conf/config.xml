@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hivemq>
+    <listeners>
+        <tcp-listener>
+            <port>1883</port>
+            <bind-address>0.0.0.0</bind-address>
+        </tcp-listener>
+    </listeners>
+
+    <persistence>
+        <enabled>true</enabled>
+        <data-folder>/opt/hivemq/data</data-folder>
+    </persistence>
+
+    <max-inflight-messages-per-client>1</max-inflight-messages-per-client>
+
+    <allow-anonymous>true</allow-anonymous>
+
+    <logging>
+        <level>ALL</level>
+        <console>true</console>
+        <file>/opt/hivemq/log/hivemq.log</file>
+    </logging>
+</hivemq>
+

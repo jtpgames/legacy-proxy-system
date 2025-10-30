@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  hivemq:
+    image: hivemq/hivemq-ce:latest
+    ports:
+      - "1883:1883"
+      - "8080:8080"
+    volumes:
+      - hivemq-data:/opt/hivemq/data
+      - ./hivemq-logs:/opt/hivemq/log
+      - ./hivemq_broker/conf/config.xml:/opt/hivemq/conf/config.xml
+      - ./hivemq_broker/extensions:/opt/hivemq/extensions
+      - /etc/localtime:/etc/localtime:ro
+
+volumes:
+  hivemq-data:
+

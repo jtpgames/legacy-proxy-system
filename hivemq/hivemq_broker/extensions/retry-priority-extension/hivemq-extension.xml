@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<hivemq-extension>
+    <id>retry-priority-extension</id>
+    <version>1.0.0</version>
+    <name>Retry Priority Extension</name>
+    <author>JL</author>
+    <priority>0</priority>
+    <start-priority>1000</start-priority>
+</hivemq-extension>
