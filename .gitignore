@@ -6,3 +6,7 @@ Baseline_Experiment/
 NG_Experiment/
 
 */docker-compose-*.png
+
+*/.cache
+hivemq/hivemq-logs/
+**/.gradle/
