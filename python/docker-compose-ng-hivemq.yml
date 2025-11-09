@@ -1,0 +1,414 @@
+version: "2.4"
+
+services:
+  ars-comp-1-1:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_1_proxy.py --use-granian"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    ports:
+      - "7081:8080"
+    environment:
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=ars-comp-1-1
+      - TARGET_URL=http://proxy1-1:8080/ID_REQ_KC_STORE7D3BPACKET
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./ars_comp_1_proxy.py:/app/ars_comp_1_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      proxy1-1:
+        condition: service_healthy
+  
+  ars-comp-1-2:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_1_proxy.py --use-granian"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    ports:
+      - "7082:8080"
+    environment:
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=ars-comp-1-2
+      - TARGET_URL=http://proxy1-2:8080/ID_REQ_KC_STORE7D3BPACKET
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./ars_comp_1_proxy.py:/app/ars_comp_1_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      proxy1-2:
+        condition: service_healthy
+  
+  ars-comp-1-3:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_1_proxy.py --use-granian"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    ports:
+      - "7083:8080"
+    environment:
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=ars-comp-1-3
+      - TARGET_URL=http://proxy1-3:8080/ID_REQ_KC_STORE7D3BPACKET
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./ars_comp_1_proxy.py:/app/ars_comp_1_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      proxy1-3:
+        condition: service_healthy
+
+  proxy1-1:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_1.py --use-granian"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    ports:
+      - "8081:8080"
+    environment:
+      - MQTT_BROKER=hivemq
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=proxy1/message
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=proxy1-1
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./mqtt/legacy_proxy_1.py:/app/legacy_proxy_1.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      - hivemq
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      retries: 10
+
+  proxy1-2:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_1.py --use-granian"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    ports:
+      - "8082:8080"
+    environment:
+      - MQTT_BROKER=hivemq
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=proxy2/message
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=proxy1-2
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./mqtt/legacy_proxy_1.py:/app/legacy_proxy_1.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      - hivemq
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      retries: 10
+
+  proxy1-3:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_1.py --use-granian"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    ports:
+      - "8083:8080"
+    environment:
+      - MQTT_BROKER=hivemq
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=proxy3/message
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=proxy1-3
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./mqtt/legacy_proxy_1.py:/app/legacy_proxy_1.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      - hivemq
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      retries: 10
+
+  proxy2-1:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_2.py"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    environment:
+      - MQTT_HOST=hivemq
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=$$share/legacy_proxy/+/message
+      - MQTT_QOS=2
+      - TARGET_URL=http://ars-comp-2-1:8080/ID_REQ_KC_STORE7D3BPACKET
+      - SERVICE_NAME=proxy2-1
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./mqtt/legacy_proxy_2.py:/app/legacy_proxy_2.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      - hivemq
+      - ars-comp-2-1
+
+  proxy2-2:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_2.py"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    environment:
+      - MQTT_HOST=hivemq
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=$$share/legacy_proxy/+/message
+      - MQTT_QOS=2
+      - TARGET_URL=http://ars-comp-2-2:8080/ID_REQ_KC_STORE7D3BPACKET
+      - SERVICE_NAME=proxy2-2
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./mqtt/legacy_proxy_2.py:/app/legacy_proxy_2.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      - hivemq
+      - ars-comp-2-2
+
+  proxy2-3:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh legacy_proxy_2.py"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    environment:
+      - MQTT_HOST=hivemq
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=$$share/legacy_proxy/+/message
+      - MQTT_QOS=2
+      - TARGET_URL=http://ars-comp-2-3:8080/ID_REQ_KC_STORE7D3BPACKET
+      - SERVICE_NAME=proxy2-3
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./mqtt/legacy_proxy_2.py:/app/legacy_proxy_2.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      - hivemq
+      - ars-comp-2-3
+
+  ars-comp-2-1:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_2_proxy.py --use-granian"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    ports:
+      - "9081:8080"
+    environment:
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=ars-comp-2-1
+      - TARGET_URL=http://ars-comp-3:1337/ID_REQ_KC_STORE7D3BPACKET
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./ars_comp_2_proxy.py:/app/ars_comp_2_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      - ars-comp-3
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      retries: 10
+
+  ars-comp-2-2:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_2_proxy.py --use-granian"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    ports:
+      - "9082:8080"
+    environment:
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=ars-comp-2-2
+      - TARGET_URL=http://ars-comp-3:1337/ID_REQ_KC_STORE7D3BPACKET
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./ars_comp_2_proxy.py:/app/ars_comp_2_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      - ars-comp-3
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      retries: 10
+
+  ars-comp-2-3:
+    image: python:3.12-slim
+    command: /bin/bash -c "./start_python_app_with_tc.sh ars_comp_2_proxy.py --use-granian"
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=2048
+      - net.ipv4.tcp_fin_timeout=30
+      - net.ipv4.ip_local_port_range=1024 61000
+      - net.ipv4.tcp_abort_on_overflow=1
+    ports:
+      - "9083:8080"
+    environment:
+      - HTTP_PORT=8080
+      - HTTP_HOST=0.0.0.0
+      - SERVICE_NAME=ars-comp-2-3
+      - TARGET_URL=http://ars-comp-3:1337/ID_REQ_KC_STORE7D3BPACKET
+      - HOST_OS=${HOST_OS:-unknown}
+      - USE_HTTP_2=true
+    volumes:
+      - ./logs:/app/logs
+      - ./ars_comp_2_proxy.py:/app/ars_comp_2_proxy.py
+      - ./start_python_app_with_tc.sh:/app/start_python_app_with_tc.sh
+      - ./requirements.txt:/app/requirements.txt
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    depends_on:
+      - ars-comp-3
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      retries: 10
+  
+  ars-comp-3:
+    image: openjdk:17-slim
+    ports:
+      - "8084:1337"
+    volumes:
+      - ../Simulators:/app
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /app
+    environment:
+      - TZ=Europe/Berlin
+    command: java -jar build/libs/Rast-Simulator-all.jar -m 0 -c 0
+
+  hivemq:
+    image: hivemq/hivemq-ce:latest
+    ports:
+      - "1883:1883"
+      - "8090:8080"
+    volumes:
+      - hivemq-data:/opt/hivemq/data
+      - ./hivemq-logs:/opt/hivemq/log
+      - ../hivemq/hivemq_broker/conf/config.xml:/opt/hivemq/conf/config.xml
+      - ../hivemq/hivemq_broker/extensions:/opt/hivemq/extensions
+      - /etc/localtime:/etc/localtime:ro
+
+volumes:
+  hivemq-data:
+
