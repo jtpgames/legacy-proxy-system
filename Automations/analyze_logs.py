@@ -787,6 +787,166 @@ def _get_subplot_position_info(subplot_index: int, rows: int, cols: int) -> dict
     }
 
 
+def create_box_plot(file_data_list: List[FileData], output_dir: Path,
+                    publication_ready: bool = False,
+                    export_svg: bool = False):
+    """Create and save box plots showing response time distributions for each group/file.
+    
+    Each box corresponds to one group or consolidated log file, showing the distribution
+    of response times across all request types in that group.
+    
+    Args:
+        file_data_list: List of FileData objects containing parsed data
+        output_dir: Directory to save the output
+        publication_ready: Whether to use publication-ready styling
+        export_svg: Whether to also export SVG format
+    """
+    
+    # Set publication-ready styling
+    if publication_ready:
+        plt.rcParams.update({
+            'font.size': 16,
+            'axes.titlesize': 16,
+            'axes.labelsize': 18,
+            'xtick.labelsize': 16,
+            'ytick.labelsize': 16,
+            'legend.fontsize': 14,
+            'font.family': 'serif',
+            'font.serif': ['Times', 'Times New Roman', 'DejaVu Serif'],
+            'mathtext.fontset': 'dejavuserif',
+            'text.usetex': True,
+            'text.latex.preamble': r'\usepackage{times}',
+            'pdf.fonttype': 42,
+            'ps.fonttype': 42,
+            'svg.fonttype': 'none',
+            'axes.unicode_minus': False,
+        })
+        figsize = (12, 8)
+    else:
+        figsize = (14, 10)
+    
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    
+    # Prepare data for box plot - collect all response times per file/group
+    box_data = []
+    labels = []
+    counts = []
+    
+    for file_data in file_data_list:
+        # Combine all response times from all request types for this file/group
+        all_times = []
+        for request_type, times in file_data.response_times.items():
+            all_times.extend(times)
+        
+        # Extract number from label (e.g., "Group 500" -> "500")
+        label = file_data.file_label
+        if "Group" in label:
+            try:
+                # Extract the number after "Group"
+                num = label.split("Group")[1].strip().split()[0]
+                label = num
+            except (IndexError, ValueError):
+                pass  # Keep original label if parsing fails
+        
+        if all_times:
+            box_data.append(all_times)
+            labels.append(label)
+            counts.append(len(all_times))
+        else:
+            # Include empty groups with placeholder
+            box_data.append([0])
+            labels.append(label)
+            counts.append(0)
+    
+    if not box_data:
+        ax.text(0.5, 0.5, 'No response time data found', 
+                ha='center', va='center', transform=ax.transAxes)
+        ax.text(0.02, 0.98, 'Box Plot - Response Time Distribution', 
+               transform=ax.transAxes, fontweight='bold', verticalalignment='top',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+    else:
+        # Create box plot
+        bp = ax.boxplot(box_data, labels=labels, patch_artist=True,
+                       showmeans=True, meanline=True,
+                       widths=0.6,
+                       medianprops=dict(color='red', linewidth=2),
+                       meanprops=dict(color='blue', linewidth=2, linestyle='--'),
+                       boxprops=dict(facecolor='lightblue', alpha=0.7, edgecolor='black', linewidth=1.5),
+                       whiskerprops=dict(color='black', linewidth=1.5),
+                       capprops=dict(color='black', linewidth=1.5),
+                       flierprops=dict(marker='o', markerfacecolor='red', markersize=4, 
+                                     linestyle='none', alpha=0.5))
+        
+        # Add count labels above each box
+        if not publication_ready:
+            for i, count in enumerate(counts):
+                if count > 0:
+                    ax.text(i + 1, max(box_data[i]) * 1.02, f'n={count:,}', 
+                           ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        # Add legend
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], color='red', linewidth=2, label='Median'),
+            Line2D([0], [0], color='blue', linewidth=2, linestyle='--', label='Mean'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='red', 
+                  markersize=6, linestyle='none', label='Outliers')
+        ]
+        ax.legend(handles=legend_elements, loc='upper right', frameon=True, fancybox=True)
+        
+        # Set labels and title
+        ax.set_ylabel('Response Time (ms)', fontweight='bold')
+        ax.set_xlabel('Number of Alarm Devices', fontweight='bold')
+        
+        # Place title inside the plot area
+        title_text = 'Response Time Distribution by Number of Alarm Devices'
+        ax.text(0.02, 0.98, title_text, transform=ax.transAxes, 
+               fontweight='bold', verticalalignment='top',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+        
+        # Rotate x-axis labels if there are many groups
+        if len(labels) > 5:
+            ax.set_xticklabels(labels, rotation=45, ha='right')
+        
+        # Add grid for better readability
+        ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+        ax.set_axisbelow(True)
+    
+    # Adjust layout
+    if publication_ready:
+        plt.tight_layout(pad=1.5)
+    else:
+        plt.tight_layout(pad=1.0)
+    
+    # Generate output filename
+    if len(file_data_list) == 1:
+        output_filename = f'{file_data_list[0].file_label}_box_plot.pdf'
+    else:
+        file_labels = '_vs_'.join([fd.file_label for fd in file_data_list[:3]])
+        if len(file_data_list) > 3:
+            file_labels += '_and_more'
+        output_filename = f'box_plot_{file_labels}.pdf'
+    
+    output_file = output_dir / output_filename
+    
+    # Save with publication-quality settings
+    if publication_ready:
+        plt.savefig(output_file, format='pdf', 
+                   bbox_inches='tight', dpi=600, facecolor='white',
+                   edgecolor='none', pad_inches=0.02, transparent=False)
+        
+        if export_svg:
+            svg_file = output_file.with_suffix('.svg')
+            plt.savefig(svg_file, format='svg', bbox_inches='tight',
+                       facecolor='white', edgecolor='none', pad_inches=0.02)
+            typer.echo(f"SVG version saved to: {svg_file}")
+    else:
+        plt.savefig(output_file, format='pdf', bbox_inches='tight')
+    
+    typer.echo(f"Box plot saved to: {output_file}")
+    plt.close()
+
+
 def create_scatter_plot(file_data_list: List[FileData], output_dir: Path,
                         publication_ready: bool = False,
                         export_svg: bool = False):
@@ -1107,13 +1267,15 @@ def analyze(
     publication_ready: bool = typer.Option(False, "--publication", "-p", help="Generate publication-ready plots with academic styling"),
     export_svg: bool = typer.Option(False, "--svg", help="Also export SVG format for better LaTeX compatibility"),
     metric_type: str = typer.Option("average", "--metric-type", "-m", help="Response time metric to plot ('average' or 'median')", case_sensitive=False),
-    scatter_plot: bool = typer.Option(False, "--scatter-plot", help="Generate scatter/line plot of response times over time instead of bar charts")
+    scatter_plot: bool = typer.Option(False, "--scatter-plot", help="Generate scatter/line plot of response times over time instead of bar charts"),
+    box_plot: bool = typer.Option(False, "--box-plot", help="Generate box plot showing response time distributions for each group")
 ):
     """
     Analyze worker log files from a directory and create visualizations showing:
     1. Bar charts: Average or median response times per request type (with request counts displayed)
        and total number of errors by category
     2. Scatter plots: Response times over relative time with error markers (--scatter-plot option)
+    3. Box plots: Response time distributions for each group (--box-plot option)
     
     Worker log files are grouped by their first number (group_id) representing different load test executions.
     All worker files from the same group are consolidated before analysis.
@@ -1124,6 +1286,7 @@ def analyze(
     - Bar chart mode: Total request count in title, request counts within bars, 
       choice between average and median response times
     - Scatter plot mode: Response times plotted over relative time, errors shown as red X markers
+    - Box plot mode: Response time distributions per group, showing median, mean, quartiles, and outliers
     - Publication-ready styling and SVG export options
     """
     
@@ -1185,7 +1348,12 @@ def analyze(
             raise typer.Exit(1)
         
         # Create and save charts using appropriate chart function
-        if scatter_plot:
+        if box_plot:
+            typer.echo("\nCreating box plot...")
+            create_box_plot(file_data_list, output_dir, 
+                          publication_ready=publication_ready, 
+                          export_svg=export_svg)
+        elif scatter_plot:
             typer.echo("\nCreating scatter plot...")
             create_scatter_plot(file_data_list, output_dir, 
                               publication_ready=publication_ready, 
