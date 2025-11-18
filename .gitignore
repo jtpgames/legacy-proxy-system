@@ -10,3 +10,5 @@ NG_Experiment/
 */.cache
 hivemq/hivemq-logs/
 **/.gradle/
+
+hivemq/retry-priority-extension/build/
