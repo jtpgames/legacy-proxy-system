@@ -77,8 +77,8 @@ public class RetryPriorityExtension implements ExtensionMain
                 messageContent = new String(bytes, StandardCharsets.UTF_8);
             }
 
-            log.info("[INBOUND] Topic: {}, Message: {}, IsRetry: {}, PendingRetries: {}", 
-                topic, messageContent, isRetry, pendingCount);
+            log.info("[INBOUND] Topic: {}, Message: {}, IsRetry: {}, PendingRetries: {}, QoS: {}", 
+                topic, messageContent, isRetry, pendingCount, input.getPublishPacket().getQos());
 
             if (isRetryTopic(topic))
             {
@@ -109,14 +109,19 @@ public class RetryPriorityExtension implements ExtensionMain
             boolean isRetry = isRetryTopic(topic);
             int pendingCount = pendingRetries.get();
             
-            log.info("[OUTBOUND] Topic: {}, Message: {}, IsRetry: {}, PendingRetries: {}", 
-                     topic, messageContent, isRetry, pendingCount);
+            log.info("[OUTBOUND] Topic: {}, Message: {}, IsRetry: {}, PendingRetries: {}, QoS: {}", 
+                     topic, messageContent, isRetry, pendingCount, input.getPublishPacket().getQos());
 
             // If retries are pending and this is NOT a retry message, delay it
             if (pendingRetries.get() > 0 && !isRetryTopic(topic))
             {
                 log.info("[OUTBOUND] Delaying normal message: {}", messageContent);
-                output.preventPublishDelivery();
+                try {
+                    output.preventPublishDelivery();
+                } catch (Exception e) {
+                    log.info("[OUTBOUND] Exception in preventPublishDelivery: {}", e);
+                }
+                log.info("[OUTBOUND] After preventPublishDelivery for message: {}", messageContent);
 
                 PublishService publishService = Services.publishService();
                 PublishPacket packet = input.getPublishPacket();
@@ -132,6 +137,7 @@ public class RetryPriorityExtension implements ExtensionMain
                 // Track scheduled task for cleanup
                 long taskId = taskIdCounter.getAndIncrement();
                 ScheduledFuture<?> future = Services.extensionExecutorService().schedule(() -> {
+                    log.info("[OUTBOUND] Trying to redeliver. taskId: {}", taskId);
                     scheduledTasks.remove(taskId);
                     // Only publish if no retries are pending anymore
                     if (pendingRetries.get() == 0) 
@@ -145,6 +151,7 @@ public class RetryPriorityExtension implements ExtensionMain
                 }, 2, TimeUnit.SECONDS);
                 
                 scheduledTasks.put(taskId, future);
+                log.info("[OUTBOUND] Redelivery scheduled. taskId: {}, message: {}", taskId, messageContent);
             }
 
             // If this IS a retry message going out, decrement counter
