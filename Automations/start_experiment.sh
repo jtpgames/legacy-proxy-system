@@ -545,6 +545,9 @@ cleanup() {
       if [ -d "mosquitto-logs" ] && [ "$(find mosquitto-logs -type f | head -n 1)" ]; then
         mkdir -pv "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
         mv -v mosquitto-logs/* "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
+      elif [ -d "hivemq-logs" ] && [ "$(find hivemq-logs -type f | head -n 1)" ]; then
+        mkdir -pv "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
+        mv -v hivemq-logs/* "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
       fi
 
       for file in ${fault_injector_logfile_base_name}*.log; do
@@ -849,7 +852,9 @@ if [[ "$experiment_type" == "legacy" ]]; then
     compose_file="docker-compose-legacy.yml"
     echo "Starting legacy proxy system"
 else
-    compose_file="docker-compose-ng.yml"
+    # compose_file="docker-compose-ng.yml"
+    compose_file="docker-compose-ng-hivemq.yml"
+    docker volume rm python_hivemq-data
     echo "Starting NG proxy system"
 fi
 
