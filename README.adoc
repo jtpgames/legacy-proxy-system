@@ -538,14 +538,6 @@ This setting controls the **client-side** HTTP protocol used for outbound reques
 * `python/mqtt/legacy_proxy_2.py` - Uses HTTP/2 for downstream requests (configured via `USE_HTTP_2`)
 * `locust_scripts/common/common_locust.py` - Load test client configured for HTTP/2 connections (configured via `USE_HTTP_2`)
 
-== Cloning
-If you want to work on the current version of the project, clone the repository and pull all git submodules with the following command. 
-
-[source]
-----
-git clone https://github.com/jtpgames/legacy-proxy-pattern.git && cd legacy-proxy-pattern && ./pull_all_submodules.sh
-----
-
 == License
 
 This project is licensed under the BSD License - see the LICENSE file for details.
