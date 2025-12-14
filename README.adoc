@@ -1,6 +1,7 @@
-Legacy Proxy Pattern Experiments
+= Legacy Proxy Pattern Experiments
 :toc:
 :toc-placement!:
+:icons font
 
 This repository contains the reference implementation of the Legacy Proxy System (LPS), including experimental scripts and automation tools for research on LPS, investigating its implementation, performance characteristics, and practical applications in architectural refactoring.
 
