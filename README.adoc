@@ -1,4 +1,4 @@
-= Legacy Proxy System Experiments
+= Legacy Proxy System (LPS)
 :toc:
 :toc-placement!:
 :icons font
