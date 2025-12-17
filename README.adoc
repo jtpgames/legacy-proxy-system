@@ -304,29 +304,30 @@ To mitigate these DNS resolution failures, we implemented a **local DNS cache** 
 **Cache Structure:**
 [source,python]
 ----
-# DNS cache dictionary (hostname -> IP address)
+# DNS cache for hostname to IP resolution
 dns_cache = {}
 
 def resolve_hostname_to_ip(url: str) -> str:
     """Resolve hostname in URL to IP address, cache the result"""
     parsed = urlparse(url)
     hostname = parsed.hostname
+
+    # Skip DNS caching if environment variable is set
+    if os.getenv('SKIP_DNS_CACHE', '').lower() in ('1', 'true', 'yes'):
+        return url
     
-    # Return original URL to disable caching (current configuration)
-    return url
-    
-    # Caching logic (activated by removing the early return above)
     if hostname in dns_cache:
         logger.debug(f"DNS cache hit for {hostname} -> {dns_cache[hostname]}")
         return url.replace(hostname, dns_cache[hostname])
     
     try:
+        # Resolve hostname to IP
         ip_address = socket.gethostbyname(hostname)
         dns_cache[hostname] = ip_address
         logger.info(f"DNS resolved {hostname} -> {ip_address}")
         return url.replace(hostname, ip_address)
     except socket.gaierror as e:
-        logger.warning(f"DNS resolution failed for {hostname}: {e}")
+        logger.warning(f"DNS resolution failed for {hostname}: {e}. Using original URL.")
         return url
 ----
 
@@ -339,7 +340,7 @@ def resolve_hostname_to_ip(url: str) -> str:
 
 **Activation Mechanism:**
 
-The DNS cache is currently **disabled by default** via an early `return url` statement in the `resolve_hostname_to_ip()` function. To enable caching for performance tests, remove or comment out this early return statement in the relevant Python files.
+The DNS cache is currently **enabled by default** and can be disabled by setting the `SKIP_DNS_CACHE` environment variable.
 
 **Benefits:**
 
@@ -352,15 +353,13 @@ The DNS cache is currently **disabled by default** via an early `return url` sta
 
 **DNS Cache Invalidation Issue**
 
-For **failover experiments**, the local DNS cache must be **disabled**. When Docker containers are stopped and restarted during failover testing:
+For **failover experiments**, the local DNS cache must be **disabled** because when Docker containers are stopped and restarted during failover testing:
 
 * **IP Address Changes**: Docker assigns a new IP address to the restarted container
 * **Stale Cache Entries**: The DNS cache still contains the old IP address
 * **Connection Failures**: Requests to cached IPs fail because the container is no longer reachable at that address
 
-**Current Configuration:**
-
-The DNS cache is disabled by default (via the early `return url` in `resolve_hostname_to_ip()`) to support failover experiments. This ensures that:
+Disabling the DNS cache ensures that:
 
 * DNS resolution happens on every request
 * Container restarts with new IP addresses are handled correctly
