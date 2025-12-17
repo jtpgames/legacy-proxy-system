@@ -92,11 +92,11 @@ run_broker_experiment_performance() {
 functions=(
   "run_setup"
   # "run_baseline_experiment_failover"
-  "run_baseline_experiment_failover_with_fault_injector"
-  # "run_baseline_experiment_performance"
+  # "run_baseline_experiment_failover_with_fault_injector"
+  "run_baseline_experiment_performance"
   # "run_broker_experiment_failover"
-  "run_broker_experiment_failover_with_fault_injector"
-  # "run_broker_experiment_performance"
+  # "run_broker_experiment_failover_with_fault_injector"
+  "run_broker_experiment_performance"
 )
 
 source run_experiment.sh
