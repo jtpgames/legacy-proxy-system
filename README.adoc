@@ -233,12 +233,8 @@ podman machine ssh "uname -r"
 
 **References:**
 
-_Note: The following references were AI-generated and have not been fully reviewed for accuracy._
-
 * Fedora CoreOS Documentation: https://docs.fedoraproject.org/en-US/fedora-coreos/[Official Fedora CoreOS Guide]
-* Container optimization design: https://github.com/coreos/fedora-coreos-docs[Fedora CoreOS Architecture]
 * Linux kernel 6.11 TCP improvements: https://kernelnewbies.org/Linux_6.11[Linux 6.11 Release Notes]
-* Immutable OS benefits: https://ostree.readthedocs.io/[OSTree Documentation]
 
 ==== Alternative Solutions
 
@@ -251,8 +247,6 @@ uvicorn.run(app, host=host, port=port, backlog=8192, ...)
 ----
 
 ==== References
-
-_Note: The following references were AI-generated and have not been fully reviewed for accuracy._
 
 * Linux TCP implementation: https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt[tcp_abort_on_overflow documentation]
 * TCP listen queue behavior: Stevens, W. Richard. "TCP/IP Illustrated, Volume 1: The Protocols." Addison-Wesley, 2011.
