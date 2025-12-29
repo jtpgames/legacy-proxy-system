@@ -178,6 +178,7 @@ class MQTTToHTTPForwarder:
     def start(self) -> None:
         """Start the MQTT client and connect to the broker."""
         try:
+            self.client.max_inflight_messages_set(1)  # inflight window = 1
             self.client.connect(
                     MQTT_HOST, 
                     MQTT_PORT, 
