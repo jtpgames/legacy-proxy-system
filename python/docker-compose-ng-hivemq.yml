@@ -398,16 +398,24 @@ services:
     command: java -jar build/libs/Rast-Simulator-all.jar -m 0 -c 0
 
   hivemq:
-    image: hivemq/hivemq-ce:latest
+    # image: hivemq/hivemq-ce:latest
+    image: hivemq/hivemq-edge:latest
     ports:
       - "1883:1883"
       - "8090:8080"
     volumes:
       - hivemq-data:/opt/hivemq/data
       - ./hivemq-logs:/opt/hivemq/log
-      - ../hivemq/hivemq_broker/conf/config.xml:/opt/hivemq/conf/config.xml
+      # - ../hivemq/hivemq_broker/conf/config.xml:/opt/hivemq/conf/config.xml
+      - ../hivemq/hivemq_broker/conf/config-edge.xml:/opt/hivemq/conf/config.xml
       - ../hivemq/hivemq_broker/extensions:/opt/hivemq/extensions
       - /etc/localtime:/etc/localtime:ro
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8080/health"] # Edge exposes a /health endpoint
+    #   interval: 5s
+    #   timeout: 5s
+    #   retries: 12
+    #   start_period: 10s
 
 volumes:
   hivemq-data:

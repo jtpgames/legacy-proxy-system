@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hivemq>
+    <!-- Mandatory Edge config version -->
+    <config-version>4</config-version>
+
+    <!-- MQTT listeners -->
+    <mqtt-listeners>
+        <tcp-listener>
+            <port>1883</port>
+            <bind-address>0.0.0.0</bind-address>
+        </tcp-listener>
+    </mqtt-listeners>
+
+    <!-- MQTT broker settings -->
+    <mqtt>
+        <!-- Maximum number of messages a client can send without acknowledgment -->
+        <receive-maximum>
+            <server-receive-maximum>65535</server-receive-maximum>
+        </receive-maximum>
+
+        <!-- Queued messages configuration -->
+        <queued-messages>
+            <max-queue-size>2147483647</max-queue-size>
+            <strategy>discard</strategy>
+        </queued-messages>
+    </mqtt>
+
+    <!-- Persistence -->
+    <persistence>
+        <mode>in-memory</mode>
+    </persistence>
+
+    <!-- Extensions are loaded from /opt/hivemq/extensions automatically -->
+    <!-- Admin UI is enabled by default on port 8080 -->
+</hivemq>
+
