@@ -99,6 +99,7 @@ class MQTTToHTTPForwarder:
                 protocol=MQTTProtocolVersion.MQTTv5
                 )
         self.client.on_connect = self.on_connect
+        self.client.on_subscribe = self.on_subscribe
         self.client.on_message = self.on_message
         self.client.on_disconnect = self.on_disconnect
         self.client.enable_logger(logger)
@@ -109,12 +110,22 @@ class MQTTToHTTPForwarder:
         """Callback for when the client connects to the broker."""
         if rc == 0:
             logger.info(f"Connected to MQTT broker at {MQTT_HOST}:{MQTT_PORT}")
-            self.client.subscribe(MQTT_TOPIC, qos=MQTT_QOS)
-            logger.info(f"Subscribed to topic: {MQTT_TOPIC} with QoS {MQTT_QOS}")
-            self.client.subscribe(MQTT_RETRY_TOPIC_SUB, qos=MQTT_QOS)
-            logger.info(f"Subscribed to topic: {MQTT_RETRY_TOPIC_SUB} with QoS {MQTT_QOS}")
+            logger.info(f"CONNECT response: rc={rc}, flags={flags}")
+            result, mid = self.client.subscribe(MQTT_TOPIC, qos=MQTT_QOS)
+            logger.info(f"Subscribed to topic: {MQTT_TOPIC} with QoS {MQTT_QOS}, result: {result}, mid: {mid}")
+            result_retry, mid_retry = self.client.subscribe(MQTT_RETRY_TOPIC_SUB, qos=MQTT_QOS)
+            logger.info(f"Subscribed to topic: {MQTT_RETRY_TOPIC_SUB} with QoS {MQTT_QOS}, result: {result_retry}, mid: {mid_retry}")
         else:
             logger.error(f"Failed to connect to MQTT broker with code: {rc}")
+
+    def on_subscribe(self, client: mqtt.Client, userdata: Any, mid: int, reason_codes: list[ReasonCode], properties: Optional[Properties]) -> None:
+        """Callback for when the broker responds to a subscribe request."""
+        logger.info(f"SUBACK received for mid {mid}, reason_codes: {[str(rc) for rc in reason_codes]}")
+        for i, rc in enumerate(reason_codes):
+            if rc.is_failure:
+                logger.error(f"Subscription {i} failed with reason code: {rc}")
+            else:
+                logger.info(f"Subscription {i} granted with QoS: {rc}")
 
     def on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:
         """Callback for when a message is received from the broker."""
@@ -156,8 +167,8 @@ class MQTTToHTTPForwarder:
             logger.error(f"[{request_id}] Unexpected error while processing message: {e}")
         finally:
             # An ack is send by the library automatically once this method returns and manual_ack is set to False. We send the ACK explicitly to allow changing the value of manual_ack without having to change the rest of the code for it to work.
-            logger.info(f"[{request_id}] Sending Ack for {msg.mid}")
-            client.ack(msg.mid, qos=MQTT_QOS)
+            logger.info(f"[{request_id}] Sending Ack for {msg.mid} with QoS {msg.qos}")
+            client.ack(msg.mid, qos=msg.qos)
 
     def on_disconnect(self, client: mqtt.Client, userdata: Any, flags: mqtt.DisconnectFlags, rc: ReasonCode) -> None:
         """Callback for when the client disconnects from the broker."""
