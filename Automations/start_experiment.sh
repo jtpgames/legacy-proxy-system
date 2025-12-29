@@ -436,9 +436,9 @@ validate_equal_number_of_requests_send_and_received() {
     > request_ids_simulator.txt
 
   echo "Request-Ids only in request_ids.txt" | tee -a validate_equal_number_of_requests_send_and_received.log
-  comm -23 request_ids.txt request_ids_simulator.txt | tee -a validate_equal_number_of_requests_send_and_received.log
+  # comm -23 request_ids.txt request_ids_simulator.txt | tee -a validate_equal_number_of_requests_send_and_received.log
   echo "Request-Ids only in request_ids_simulator.txt" | tee -a validate_equal_number_of_requests_send_and_received.log
-  comm -13 request_ids.txt request_ids_simulator.txt | tee -a validate_equal_number_of_requests_send_and_received.log
+  # comm -13 request_ids.txt request_ids_simulator.txt | tee -a validate_equal_number_of_requests_send_and_received.log
 
   echo "Request-Ids in locust_log_1.log: $count_request_ids_load_tester" | tee -a validate_equal_number_of_requests_send_and_received.log
   echo "Matches in gs_simulation.log: $count_file2" | tee -a validate_equal_number_of_requests_send_and_received.log
@@ -854,7 +854,7 @@ if [[ "$experiment_type" == "legacy" ]]; then
 else
     # compose_file="docker-compose-ng.yml"
     compose_file="docker-compose-ng-hivemq.yml"
-    docker volume rm python_hivemq-data
+    docker volume rm python_hivemq-data 2>/dev/null || true
     echo "Starting NG proxy system"
 fi
 
