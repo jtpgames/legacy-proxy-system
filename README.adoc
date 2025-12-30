@@ -405,6 +405,66 @@ Docker Compose creates a default bridge network where each service is assigned:
 * Docker Embedded DNS: https://docs.docker.com/config/containers/container-networking/#dns-services[Docker DNS Services Documentation]
 * Python DNS Resolution: https://docs.python.org/3/library/socket.html#socket.gethostbyname[socket.gethostbyname() Documentation]
 
+=== HiveMQ Shared Subscription Load Balancing Under Load (CE and Edge; Observed “Sticky” Distribution)
+
+==== Context
+
+LPS relies on MQTT shared subscriptions for horizontal scaling of the MQTT-to-HTTP bridge (`legacy_proxy_2`). In our Compose setup:
+
+* Publishers (`legacy_proxy_1`, services `proxy1-{1,2,3}`) publish to per-instance topics:
+** `proxy1/message`, `proxy2/message`, `proxy3/message`
+* Subscribers (`legacy_proxy_2`, services `proxy2-{1,2,3}`) subscribe using a shared subscription with a wildcard:
+** `$share/legacy_proxy/+/message`
+** (plus retry topic `$share/legacy_proxy/+/retry/message`)
+* QoS is configured as QoS 2 in the application configuration; however, in packet-level logs we observed that HiveMQ may grant a lower subscription QoS (e.g., SUBACK “Granted QoS 1”) and deliver messages at QoS 1. This is documented HiveMQ behavior.
+
+The expected behavior for our experiments is an approximately even distribution of messages across the three `legacy_proxy_2` instances.
+
+We reproduced the load-dependent distribution behavior described below with both HiveMQ Community Edition (hivemq-ce) and HiveMQ Edge (hivemq-edge).
+
+==== What We Observed in the NG Experiment (using LPS)
+
+In performance experiments, message distribution can collapse entirely:
+
+* One `legacy_proxy_2` instance (e.g., `proxy2-1`) receives essentially *all* messages.
+* The other two instances (e.g., `proxy2-2`, `proxy2-3`) receive *none*.
+
+We confirmed this by counting “Successfully forwarded …” log lines in the NG experiment logs (for example under `Automations/NG_Experiment/.../LegacyProxy_Logs/proxy2-*.log*`).
+
+==== Reproduction / Isolation Experiments
+
+To isolate the problem from our application logic, we created a minimal reproducible test harness in `hivemq/`:
+
+* `hivemq/test_shared_subscription.sh` runs a controlled setup against HiveMQ and can switch:
+** subscriber implementation: `mosquitto_sub` vs `paho-mqtt`
+** publisher implementation: `mosquitto_pub` vs `paho-mqtt` vs `aiomqtt` (including a *persistent connection* mode)
+** QoS: `--qos 1` or `--qos 2`
+** topics: matching the real NG topology described above
+* Each execution stores full logs in a dedicated timestamped folder under `hivemq/test_logs/`.
+
+These experiments showed that the distribution is strongly dependent on *load* and *publish rate*, not just on the MQTT client libraries.
+
+==== Key Findings
+
+* **Low publish rate:** With a low rate (e.g., ~1 message/second), distribution appears to work and messages are spread across subscribers.
+* **Moderate rate / burstiness:** With a higher rate (e.g., ~3 messages/second), messages often become “chunked”:
+** all messages within a short time slice may be delivered to one subscriber
+** the next time slice may be delivered to another subscriber
+* **High broker load:** Under sustained high throughput / heavy broker load, HiveMQ (CE and Edge) may become *sticky* and route almost everything to a single subscriber for an extended period (effectively disabling load balancing).
+* **Client libraries are not the primary driver:** We observed the load-dependent behavior across different combinations of publisher/subscriber clients (mosquitto CLI, paho-mqtt, aiomqtt). Changing the client implementation alone did not eliminate the effect.
+* **Client-side in-flight limits may influence, but not fix:** The relevant “max in-flight” behavior is negotiated/controlled at the client level (e.g., MQTT v5 `Receive Maximum` or client library in-flight settings), not via a dedicated HiveMQ broker-side knob for shared-subscription fairness. Tuning this can change how uneven the distribution looks under load, but does not guarantee round-robin fairness.
+
+==== Conclusion
+
+Based on these experiments and the persistent reports in the HiveMQ CE community, we treat this as a *known limitation or an unresolved bug* in HiveMQ shared subscription distribution under load (observed on both HiveMQ CE and HiveMQ Edge).
+
+At the time of writing, the behavior described above matches reports in HiveMQ CE issue tracker discussions, and the relevant issue is still open. Therefore, for experiments or production-like workloads that require strict/robust load balancing, shared subscriptions in HiveMQ CE/Edge should be validated under realistic load, and application-level mitigations (rate limiting, partitioned topics per consumer group, or alternative broker choices) should be considered.
+
+==== References
+
+* HiveMQ CE issue (still open): https://github.com/hivemq/hivemq-community-edition/issues/558
+* HiveMQ community report: https://community.hivemq.com/t/inconsistent-message-distribution-with-shared-subscriptions-in-hivemq-ce-on-kubernetes/2364
+
 == Usage
 
 === HTTP/2 Support with Granian
