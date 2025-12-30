@@ -513,7 +513,7 @@ This CPU bottleneck provides additional context for the sticky distribution beha
 * Increasing CPU count alone will not resolve the issue if the distribution logic remains single-threaded.
 * This reinforces the need for application-level mitigations or alternative broker choices for workloads requiring robust load balancing under high throughput. Also, using a single-node HiveMQ instance is not a production-environment, so our observations are mostly relevant for our particular test environment and are not transferable to a production-like environment.
 * Further performance improvements in legacy_proxy_2 are meaningless, the broker is the bottleneck in the experiment.
-* We have an unstable M/M/1 system, even though we try to have an M/M/c system. Over an experiment duration of 1h48m: Arrival rate λ = 302.5107 msg/s, Service rate μ = 22.3637 msg/s, Utilization ρ  = 13.5268
+* During an experiment of 1 hour and 48 minutes, we observed that the system behaves as an unstable M/M/1 queue (ρ > 1) despite being designed as an M/M/c system. The measured arrival rate was λ = 302.51 msg/s, the service rate μ = 22.36 msg/s, resulting in a utilization ρ ≈ 13.53, indicating severe overloading. However, our performance experiment does not crash and the queue limits are not exceeded but would this would likely happen if the experiment would run longer.
 * Draining the queue after the load test takes for example: 2707 seconds ~ 45 minutes.
 
 **Test Environment**
