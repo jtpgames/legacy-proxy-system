@@ -460,6 +460,66 @@ Based on these experiments and the persistent reports in the HiveMQ CE community
 
 At the time of writing, the behavior described above matches reports in HiveMQ CE issue tracker discussions, and the relevant issue is still open. Therefore, for experiments or production-like workloads that require strict/robust load balancing, shared subscriptions in HiveMQ CE/Edge should be validated under realistic load, and application-level mitigations (rate limiting, partitioned topics per consumer group, or alternative broker choices) should be considered.
 
+==== HiveMQ CPU Bottleneck: Single-Core Limitation
+
+**Problem Description**
+
+During performance experiments with queue-draining mechanisms (a mechanism we employ after each experiment to make sure that all messages are forwarded to the last service in the chain), we observe that HiveMQ's message distribution issue correlates with a CPU bottleneck:
+
+* **Symptom**: "Sticky" message distribution: only a single `legacy_proxy_2` subscriber receives messages.
+* **CPU Usage**: HiveMQ utilizes nearly 100% of a single CPU core, despite the virtual machine having 4 CPU cores available.
+* **Thread Analysis**: Using `top -H -p $(pgrep -f java)` inside the HiveMQ container revealed that the `hivemq-eventloop` thread uses 100% CPU.
+* **System Resources**: While the host VM has 4 CPU cores (verified with `nproc`), HiveMQ only saturates one core during high load.
+
+**Example Docker Stats Output:**
+
+[source]
+----
+CONTAINER ID  NAME                   CPU %   MEM USAGE / LIMIT   MEM %   NET I/O           BLOCK I/O       PIDS  TIME          %CPU
+b1a3b836ff8d  python-hivemq-1        95.92%  1.079GB / 3.793GB   28.44%  314.2MB / 198.2MB 136MB / 3.15MB  51    1h8m32.88s    74.58%
+c8c77c430d12  python-proxy1-1-1      0.01%   57.69MB / 3.793GB   1.52%   225.1MB / 179.1MB 5.947MB / 158.8MB 7   3m48.16s      4.14%
+5017a60377b0  python-proxy2-1-1      1.81%   44.92MB / 3.793GB   1.18%   93.02MB / 67.47MB 1.176MB / 145MB  3   2m19.62s      2.53%
+3b881671cd10  python-proxy2-2-1      0.00%   30.98MB / 3.793GB   0.82%   27.21MB / 749kB   823.3kB / 145.4MB 3   7.10s         0.13%
+----
+
+Note that `python-hivemq-1` shows 95.92% CPU usage, which represents saturation of a single core on a 4-core system.
+
+**Thread-Level Analysis:**
+
+[source,bash]
+----
+# Connect to HiveMQ container and inspect thread CPU usage
+docker exec -it python-hivemq-1 sh
+top -H -p $(pgrep -f java)
+
+# Verify available CPU cores
+nproc  # Output: 4
+----
+
+The `top -H` output showed the `hivemq-eventloop` thread consuming 100% of a single core, indicating that message distribution processing is not parallelized across available cores.
+
+**Analysis**
+
+This CPU bottleneck provides additional context for the sticky distribution behavior observed under load:
+
+* **Single-Threaded Bottleneck**: The `hivemq-eventloop` appears to handle shared subscription message distribution in a single-threaded manner, creating a serialization point.
+* **Load-Dependent Failure**: As message throughput increases, the single-threaded eventloop becomes saturated, potentially causing HiveMQ to fall back to simpler (but less balanced) distribution strategies.
+* **Insufficient Parallelization**: HiveMQ CE/Edge does not appear to leverage multiple CPU cores for shared subscription distribution, even when cores are available.
+
+**Implications**
+
+* The sticky distribution behavior observed in our experiments may be a consequence of CPU saturation in the eventloop thread.
+* Increasing CPU count alone will not resolve the issue if the distribution logic remains single-threaded.
+* This reinforces the need for application-level mitigations or alternative broker choices for workloads requiring robust load balancing under high throughput. Also, using a single-node HiveMQ instance is not a production-environment, so our observations are mostly relevant for our particular test environment and are not transferable to a production-like environment.
+* Further performance improvements in legacy_proxy_2 are meaningless, the broker is the bottleneck in the experiment.
+
+**Test Environment**
+
+* **Host**: Fedora CoreOS 40 VM running on MacBook Pro M2 Pro
+* **VM Configuration**: 4 vCPUs, 4 GB RAM
+* **Container Runtime**: Docker/Podman
+* **HiveMQ Version**: Community Edition (hivemq-ce) and Edge (hivemq-edge)
+
 ==== References
 
 * HiveMQ CE issue (still open): https://github.com/hivemq/hivemq-community-edition/issues/558
