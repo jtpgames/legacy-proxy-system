@@ -526,8 +526,26 @@ cleanup() {
     sleep 10
 
     if [[ "$experiment_type" == "ng" ]]; then
-      echo "Waiting for another 2 minutes for the remaining messages in the broker to be consumed."
-      sleep 120
+      echo "Waiting for broker queues to drain (monitoring ars_simulation.log for inactivity)..."
+      log_file="$root_folder/Simulators/ars_simulation.log"
+      if [[ -f "$log_file" ]]; then
+        drain_start=$(date +%s)
+        prev_size=$(stat -f%z "$log_file" 2>/dev/null || stat -c%s "$log_file" 2>/dev/null)
+        stable_count=0
+        while [[ $stable_count -lt 2 ]]; do
+          sleep 1
+          curr_size=$(stat -f%z "$log_file" 2>/dev/null || stat -c%s "$log_file" 2>/dev/null)
+          if [[ "$prev_size" == "$curr_size" ]]; then
+            ((stable_count++))
+          else
+            stable_count=0
+            prev_size=$curr_size
+          fi
+        done
+        drain_end=$(date +%s)
+        drain_duration=$((drain_end - drain_start))
+        echo "Broker queues drained (log file stable for 2 seconds). Time taken: ${drain_duration} seconds."
+      fi
     fi
 
     echo "Stopping all containers..."
@@ -548,6 +566,9 @@ cleanup() {
       elif [ -d "hivemq-logs" ] && [ "$(find hivemq-logs -type f | head -n 1)" ]; then
         mkdir -pv "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
         mv -v hivemq-logs/* "$root_folder/Automations/$target_folder_for_logs/Broker_Logs"
+
+        # determine arrival and service rates for this experiment
+        python "$root_folder/Automations/analyze_broker_logs.py" < "$root_folder/Automations/$target_folder_for_logs/Broker_Logs/hivemq.log" > "$root_folder/Automations/$target_folder_for_logs/Broker_Logs/hivemq_analysis.log"
       fi
 
       for file in ${fault_injector_logfile_base_name}*.log; do
