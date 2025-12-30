@@ -450,7 +450,7 @@ These experiments showed that the distribution is strongly dependent on *load* a
 * **Moderate rate / burstiness:** With a higher rate (e.g., ~3 messages/second), messages often become “chunked”:
 ** all messages within a short time slice may be delivered to one subscriber
 ** the next time slice may be delivered to another subscriber
-* **High broker load:** Under sustained high throughput / heavy broker load, HiveMQ (CE and Edge) may become *sticky* and route almost everything to a single subscriber for an extended period (effectively disabling load balancing).
+* **High broker load:** Under sustained high throughput / heavy broker load, HiveMQ (CE and Edge) may become *sticky* and route almost everything to a single subscriber for an extended period (effectively disabling load balancing). See <<hivemq-cpu-bottleneck>>. 
 * **Client libraries are not the primary driver:** We observed the load-dependent behavior across different combinations of publisher/subscriber clients (mosquitto CLI, paho-mqtt, aiomqtt). Changing the client implementation alone did not eliminate the effect.
 * **Client-side in-flight limits may influence, but not fix:** The relevant “max in-flight” behavior is negotiated/controlled at the client level (e.g., MQTT v5 `Receive Maximum` or client library in-flight settings), not via a dedicated HiveMQ broker-side knob for shared-subscription fairness. Tuning this can change how uneven the distribution looks under load, but does not guarantee round-robin fairness.
 
@@ -460,6 +460,7 @@ Based on these experiments and the persistent reports in the HiveMQ CE community
 
 At the time of writing, the behavior described above matches reports in HiveMQ CE issue tracker discussions, and the relevant issue is still open. Therefore, for experiments or production-like workloads that require strict/robust load balancing, shared subscriptions in HiveMQ CE/Edge should be validated under realistic load, and application-level mitigations (rate limiting, partitioned topics per consumer group, or alternative broker choices) should be considered.
 
+[[hivemq-cpu-bottleneck]]
 ==== HiveMQ CPU Bottleneck: Single-Core Limitation
 
 **Problem Description**
@@ -512,6 +513,8 @@ This CPU bottleneck provides additional context for the sticky distribution beha
 * Increasing CPU count alone will not resolve the issue if the distribution logic remains single-threaded.
 * This reinforces the need for application-level mitigations or alternative broker choices for workloads requiring robust load balancing under high throughput. Also, using a single-node HiveMQ instance is not a production-environment, so our observations are mostly relevant for our particular test environment and are not transferable to a production-like environment.
 * Further performance improvements in legacy_proxy_2 are meaningless, the broker is the bottleneck in the experiment.
+* We have an unstable M/M/1 system, even though we try to have an M/M/c system. Over an experiment duration of 1h48m: Arrival rate λ = 302.5107 msg/s, Service rate μ = 22.3637 msg/s, Utilization ρ  = 13.5268
+* Draining the queue after the load test takes for example: 2707 seconds ~ 45 minutes.
 
 **Test Environment**
 
